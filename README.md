@@ -51,6 +51,9 @@ endpoints.
 - Debian 12/13 or Rocky Linux 8/9.
 - Root privileges for package installation, `/etc/kamailio`, systemd, and `/etc/mnscloud`.
 - Network reachability from the Kamailio host to the MNSCloud API base URL.
+- `mnscloud-agent` already installed, enrolled, and active. The installer validates the shared
+  Agent prerequisite contract with
+  `/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh --require-active --require-enrolled`.
 - A `VoipSoftswitchServer` record in the API/control plane for this runtime, with engine
   `kamailio` and a matching `VsrNodeUUID`, or an operational bootstrap flow that can bind the local
   node UUID.

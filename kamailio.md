@@ -47,6 +47,8 @@ hash fica salvo no banco.
 Antes de instalar, confirme:
 
 - o API/control plane já está publicado com o contrato canônico `/api/v1/softswitch/runtime/*`;
+- o `mnscloud-agent` já está instalado, enrolado e ativo; o instalador valida isso com
+  `/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh --require-active --require-enrolled`;
 - o canal `stable` do repositório aponta para uma versão que usa esse contrato;
 - existe cadastro `VoipSoftswitchServer` para este runtime com engine `kamailio` e `VsrNodeUUID`
   compatível, ou o fluxo operacional de bootstrap está preparado para vincular o node UUID local;

@@ -21,6 +21,17 @@ KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}
 KAMAILIO_RUNTIME_KIT_REPO_URL="${KAMAILIO_RUNTIME_KIT_REPO_URL:-https://github.com/manaoscloud/mnscloud-runtime-kit.git}"
 KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
 KAMAILIO_RUNTIME_KIT_REF="${KAMAILIO_RUNTIME_KIT_REF:-}"
+AGENT_VALIDATOR="/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh"
+
+validate_mnscloud_agent() {
+  if [[ "$DRY_RUN" == true ]]; then
+    log DRY "bash '${AGENT_VALIDATOR}' --require-active --require-enrolled"
+    return 0
+  fi
+  [[ -x "${AGENT_VALIDATOR}" ]] ||
+    { err "mnscloud-agent validator not found at ${AGENT_VALIDATOR}. Update/reinstall the Agent before installing Kamailio Softswitch."; return 1; }
+  bash "${AGENT_VALIDATOR}" --require-active --require-enrolled
+}
 
 normalize_url() {
   local value="$1"
@@ -644,6 +655,7 @@ main() {
   local app_security_script="${MNSCLOUD_MONOREPO_ROOT:-${PROJECT_ROOT}}/scripts/application-security.sh"
   [[ -f "${app_security_script}" ]] && run "bash '${app_security_script}'"
   ensure_local_hostname_hosts
+  validate_mnscloud_agent
   ensure_api_base_file
   ensure_node_uuid_file
   ensure_api_token_file
