@@ -24,7 +24,7 @@ outros serviços que precisem ancorar mídia.
 - `VoipSoftswitchServer`: servidores autorizados a consultar runtime.
 - `RealtimeMediaServer`: media relay opcional selecionado no `VoipSoftswitchServer` para ancorar
   RTP/SRTP via `mnscloud-media`/`rtpengine`.
-- `VoipSoftswitchAccount`: vínculo tenant/domínio/customer/provider/server usado para autorizar domínios e assinantes.
+- `VoipSoftswitchAccount`: vínculo tenant, cliente, domínio e servidor usado para autorizar domínios e assinantes.
 
 ## Endpoints Runtime
 
