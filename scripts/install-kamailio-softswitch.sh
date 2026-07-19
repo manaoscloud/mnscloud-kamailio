@@ -239,7 +239,6 @@ bootstrap_node_via_api() {
   http_code="$(curl -sS -o "${response_file}" -w "%{http_code}" -X POST "${API_BASE}/api/v1/softswitch/runtime/bootstrap?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}" -H "Content-Type: application/json" -H "Authorization: Bearer ${API_TOKEN}" -H "X-Softswitch-Engine: ${SOFTSWITCH_ENGINE}" --data "${payload}" 2>>"${LOG_FILE}")"
   server_uuid="$(json_field "serverUUID" "${response_file}")"
   media_socket="$(json_field "rtpengineSocket" "${response_file}")"
-  [[ -z "${media_socket}" ]] && media_socket="$(json_field "mediaSocket" "${response_file}")"
   if [[ -n "${media_socket}" ]]; then
     MEDIA_SOCKET="${media_socket}"
     write_file "${MEDIA_SOCKET_FILE}" "${MEDIA_SOCKET}"

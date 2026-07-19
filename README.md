@@ -41,6 +41,9 @@ contract. It can run on MNSCloud, customer, or partner infrastructure.
 - Runtime engine: `kamailio`
 - Optional media relay: API-selected `RealtimeMediaServer` exposed to Kamailio as an
   `rtpengineSocket`.
+- This connector installs Kamailio only. OpenSIPS remains a supported Softswitch
+  engine in the control plane, but requires its own autonomous connector before
+  an install command can be generated.
 
 The API/control plane must be deployed with the canonical softswitch runtime contract before this
 connector is installed or updated. This connector does not call engine-specific legacy runtime
