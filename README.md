@@ -56,7 +56,8 @@ endpoints.
 - Network reachability from the Kamailio host to the MNSCloud API base URL.
 - `mnscloud-agent` already installed, enrolled, and active. The installer validates the shared
   Agent prerequisite contract with
-  `/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh --require-active --require-enrolled`.
+  `/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh --require-active --require-enrolled
+  --require-job voip.softswitch.runtime --require-capability voip.softswitch.manage`.
 - A `VoipSoftswitchServer` record in the API/control plane for this runtime, with engine
   `kamailio` and a matching `VsrNodeUUID`, or an operational bootstrap flow that can bind the local
   node UUID.
