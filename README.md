@@ -149,6 +149,13 @@ See `kamailio.md` and `SECURITY.md` for details.
 
 ## Runtime Behavior
 
+- Outbound registration trunks use a single canonical SIP identity: `username`, `password`,
+  `host`, optional `realm`, optional `fromDomain`, transport, port and expiration. The generated
+  local identity is `username@fromDomain`; when `fromDomain` is empty it is `username@host`.
+  AOR, contact user/domain and From User overrides are deliberately unsupported.
+- Trunk codecs are owned by the control plane and returned as part of the runtime policy. They are
+  combined with the account/subscriber and server codec policies; the connector never accepts an
+  arbitrary codec or RTP-engine rule from the server filesystem.
 - SIP REGISTER is authorized by the MNSCloud runtime API and then validated with real SIP digest
   authentication before the contact is saved locally.
 - SIP INVITE from subscribers is also proxy-authenticated before local lookup or outbound routing.

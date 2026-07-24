@@ -50,6 +50,9 @@ monorepo at runtime.
   `codecPolicy.rtpengineFlags`, pass those API-generated flags to `rtpengine_offer()` and
   `rtpengine_answer()`. Do not expose or persist arbitrary user-provided rtpengine flags in this
   connector.
+- Registration trunks have one canonical identity: `username@fromDomain`, falling back to
+  `username@host` when no origin domain is configured. Do not add AOR, contact or From User
+  override compatibility fields.
 - Search the module for sensitive values before publishing.
 - Keep all required installer helpers inside this repository.
 - Keep the module consuming API contracts only.
