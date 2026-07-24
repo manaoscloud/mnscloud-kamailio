@@ -25,12 +25,12 @@ AGENT_VALIDATOR="/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh"
 
 validate_mnscloud_agent() {
   if [[ "$DRY_RUN" == true ]]; then
-    log DRY "bash '${AGENT_VALIDATOR}' --require-active --require-enrolled"
+    log DRY "bash '${AGENT_VALIDATOR}' --require-active --require-enrolled --require-job voip.softswitch.runtime --require-capability voip.softswitch.manage"
     return 0
   fi
   [[ -x "${AGENT_VALIDATOR}" ]] ||
     { err "mnscloud-agent validator not found at ${AGENT_VALIDATOR}. Update/reinstall the Agent before installing Kamailio Softswitch."; return 1; }
-  bash "${AGENT_VALIDATOR}" --require-active --require-enrolled
+  bash "${AGENT_VALIDATOR}" --require-active --require-enrolled --require-job voip.softswitch.runtime --require-capability voip.softswitch.manage
 }
 
 normalize_url() {
@@ -397,6 +397,7 @@ loadmodule \"corex.so\"
 loadmodule \"ctl.so\"
 loadmodule \"http_client.so\"
 loadmodule \"jansson.so\"
+loadmodule \"uac.so\"
 ${rtpengine_modules}
 
 modparam(\"usrloc\", \"db_mode\", 0)
@@ -404,6 +405,8 @@ modparam(\"registrar\", \"max_contacts\", 1)
 modparam(\"auth\", \"nonce_expire\", 300)
 modparam(\"auth\", \"qop\", \"auth\")
 modparam(\"http_client\", \"query_result\", 0)
+modparam(\"uac\", \"reg_timer_interval\", 60)
+modparam(\"uac\", \"reg_retry_interval\", 300)
 ${rtpengine_params}
 
 route[AUTH_LOOKUP] {
@@ -658,6 +661,8 @@ main() {
   ensure_api_base_file
   ensure_node_uuid_file
   ensure_api_token_file
+  run "install -d -m 0750 '/etc/mnscloud/softswitch/runtime'"
+  run "chown root:root '/etc/mnscloud/softswitch/runtime'"
   case "$(detect_kamailio_os)" in
     debian) install_packages_debian ;;
     rocky) install_packages_rocky ;;

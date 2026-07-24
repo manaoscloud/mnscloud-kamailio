@@ -32,6 +32,7 @@ Os endpoints internos ficam em:
 
 - `POST /api/v1/softswitch/runtime/heartbeat`
 - `POST /api/v1/softswitch/runtime/bootstrap`
+- `POST /api/v1/softswitch/runtime/registrations`
 - `POST /api/v1/softswitch/runtime/auth`
 - `POST /api/v1/softswitch/runtime/route`
 - `POST /api/v1/softswitch/runtime/accounting`
@@ -108,6 +109,17 @@ Inbound por trunk/IP também usa `/api/v1/softswitch/runtime/route`, com `direct
 - o DID aponta para assinante registrado ou para destino externo explícito.
 
 Sem esses requisitos, o conector continua fail-closed e não aceita a chamada inbound como trunk.
+
+## Registros de tronco
+
+Troncos com autenticação `register` são registros UAC de saída para operadoras. A API mantém a
+configuração canônica; o Agent do servidor recebe o job `voip.softswitch.runtime` e executa
+`scripts/sync-kamailio-softswitch-runtime.sh`. O script consulta `/runtime/registrations`, aplica
+somente o delta pelo módulo UAC do Kamailio e remove explicitamente registros que deixaram de
+existir no controle de plano. Não há polling periódico ou fallback local para essa configuração.
+
+Troncos `ip_acl` não executam REGISTER: eles são identificados exclusivamente pelos IPs/CIDRs
+autorizados durante a decisão inbound da API.
 
 ## Lifecycle
 
