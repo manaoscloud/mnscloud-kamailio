@@ -25,7 +25,7 @@ state_payload='{"registrations":[]}'
 [[ -r "$STATE_FILE" ]] && state_payload="$(cat "$STATE_FILE")"
 
 registration_fingerprint() {
-  jq -cS '{registrationUUID, host, port, transport, outboundProxy, username, password, realm, fromDomain, fromUser, aor, contactUser, contactDomain, registrationExpires}' \
+  jq -cS '{registrationUUID, host, port, transport, outboundProxy, username, password, realm, fromDomain, registrationExpires}' \
     | sha256sum | awk '{print $1}'
 }
 
@@ -48,7 +48,15 @@ printf '{"registrations":[' > "$next_state"
 first_registration=true
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
-  port="$(jq -r '.port // 5060' <<<"$item")"; transport="$(jq -r '.transport // "udp" | ascii_downcase' <<<"$item")"; local_user="$(jq -r '.contactUser // .fromUser // .username' <<<"$item")"; local_domain="$(jq -r '.contactDomain // .fromDomain // .host' <<<"$item")"; realm="$(jq -r '.realm // .host' <<<"$item")"; proxy="$(jq -r '.outboundProxy // empty' <<<"$item")"; expires="$(jq -r '.registrationExpires // 3600' <<<"$item")"
+  port="$(jq -r '.port // 5060' <<<"$item")"
+  transport="$(jq -r '.transport // "udp" | ascii_downcase' <<<"$item")"
+  local_user="$username"
+  local_domain="$(jq -r '.fromDomain // empty' <<<"$item")"
+  [[ -n "$local_domain" && "$local_domain" != "null" ]] || local_domain="$host"
+  realm="$(jq -r '.realm // empty' <<<"$item")"
+  [[ -n "$realm" && "$realm" != "null" ]] || realm="$host"
+  proxy="$(jq -r '.outboundProxy // empty' <<<"$item")"
+  expires="$(jq -r '.registrationExpires // 3600' <<<"$item")"
   fingerprint="$(registration_fingerprint <<<"$item")"
   [[ "$id" != "null" && "$username" != "null" && "$password" != "null" && "$host" != "null" ]] || {
     echo "runtime registration payload contains required null values" >&2
