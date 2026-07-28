@@ -428,7 +428,7 @@ route[AUTH_LOOKUP] {
   # http_client_query supports POST bodies and returns the HTTP response code in
   # \$rc. Keep this contract because authorization must distinguish a transport
   # failure from an API denial before challenging the SIP client.
-  http_client_query(\$var(auth_url), \$var(auth_body), \$var(auth_headers), \$var(auth_reply));
+  http_client_query(\$var(auth_url), \$var(auth_body), \$var(auth_headers), \"\$var(auth_reply)\");
   \$var(auth_http_code) = \$rc;
   if (\$var(auth_http_code) < 200 || \$var(auth_http_code) >= 300) {
     xlog(\"L_ERR\", \"MNSCloud auth API request failed for \$fU@\$fd: http=\$var(auth_http_code) curl=\$curlerror(error)\\n\");
@@ -504,7 +504,7 @@ route[API_ROUTE] {
   jansson_set(\"string\", \"destination\", \"\$var(request_user)\", \"\$var(route_body)\");
   \$var(route_reply) = \"\";
 
-  http_client_query(\$var(route_url), \$var(route_body), \$var(route_headers), \$var(route_reply));
+  http_client_query(\$var(route_url), \$var(route_body), \$var(route_headers), \"\$var(route_reply)\");
   \$var(route_http_code) = \$rc;
   if (\$var(route_http_code) < 200 || \$var(route_http_code) >= 300) {
     xlog(\"L_ERR\", \"MNSCloud route API request failed for \$fU -> \$rU: http=\$var(route_http_code) curl=\$curlerror(error)\\n\");
@@ -558,7 +558,7 @@ route[INBOUND_ROUTE] {
   jansson_set(\"string\", \"domain\", \"\$var(request_domain)\", \"\$var(inbound_body)\");
   \$var(inbound_reply) = \"\";
 
-  http_client_query(\$var(inbound_url), \$var(inbound_body), \$var(inbound_headers), \$var(inbound_reply));
+  http_client_query(\$var(inbound_url), \$var(inbound_body), \$var(inbound_headers), \"\$var(inbound_reply)\");
   \$var(inbound_http_code) = \$rc;
   if (\$var(inbound_http_code) < 200 || \$var(inbound_http_code) >= 300) {
     xlog(\"L_ERR\", \"MNSCloud inbound route API request failed for \$si -> \$rU: http=\$var(inbound_http_code) curl=\$curlerror(error)\\n\");
