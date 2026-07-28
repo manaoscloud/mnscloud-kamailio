@@ -451,6 +451,10 @@ route[AUTH_LOOKUP] {
   # failure from an API denial before challenging the SIP client.
   http_client_query(\$var(auth_url), \$var(auth_body), \$var(auth_headers), \"\$var(auth_reply)\");
   \$var(auth_http_code) = \$rc;
+  if (\$var(auth_http_code) == 429) {
+    xlog(\"L_WARN\", \"MNSCloud SIP edge denied engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) reason=rate_limit\\n\");
+    return(-20);
+  }
   if (\$var(auth_http_code) < 200 || \$var(auth_http_code) >= 300) {
     xlog(\"L_ERR\", \"MNSCloud auth API request failed for \$fU@\$fd: http=\$var(auth_http_code) curl=\$curlerror(error)\\n\");
     return(-1);
@@ -462,7 +466,7 @@ route[AUTH_LOOKUP] {
   }
 
   if (\$var(auth_authorized) != \"true\" && \$var(auth_authorized) != \"1\") {
-    xlog(\"L_WARN\", \"MNSCloud denied subscriber \$fU@\$fd (authorized=\$var(auth_authorized))\\n\");
+    xlog(\"L_WARN\", \"MNSCloud SIP edge denied engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) reason=authorization\\n\");
     return(-2);
   }
 
@@ -481,6 +485,11 @@ route[AUTH_LOOKUP] {
 
 route[REGISTER_AUTH] {
   route(AUTH_LOOKUP);
+  if (\$rc == -20) {
+    append_to_reply(\"Retry-After: 60\\r\\n\");
+    sl_send_reply(\"503\", \"Authentication Temporarily Unavailable\");
+    exit;
+  }
   if (\$rc < 0) {
     sl_send_reply(\"403\", \"Forbidden\");
     exit;
@@ -497,6 +506,11 @@ route[REGISTER_AUTH] {
 
 route[PROXY_AUTH] {
   route(AUTH_LOOKUP);
+  if (\$rc == -20) {
+    append_to_reply(\"Retry-After: 60\\r\\n\");
+    sl_send_reply(\"503\", \"Authentication Temporarily Unavailable\");
+    exit;
+  }
   if (\$rc < 0) {
     sl_send_reply(\"403\", \"Forbidden\");
     exit;
