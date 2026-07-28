@@ -158,6 +158,10 @@ See `kamailio.md` and `SECURITY.md` for details.
   arbitrary codec or RTP-engine rule from the server filesystem.
 - SIP REGISTER is authorized by the MNSCloud runtime API and then validated with real SIP digest
   authentication before the contact is saved locally.
+- Unauthenticated `REGISTER` and `INVITE` bursts are dropped locally by Kamailio `pike` before
+  any runtime API callback. Defaults are a 2-second sampling window, density 30, and 120-second
+  cleanup; tune only through `MNSCLOUD_KAMAILIO_PIKE_*` environment variables when a measured
+  traffic profile requires it.
 - SIP INVITE from subscribers is also proxy-authenticated before local lookup or outbound routing.
 - Local subscriber-to-subscriber calls use Kamailio `usrloc` after authentication.
 - Outbound calls use `/api/v1/softswitch/runtime/route`; the API remains responsible for tenant,
