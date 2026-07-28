@@ -420,8 +420,10 @@ route[AUTH_LOOKUP] {
   jansson_set(\"string\", \"domain\", \"\$var(from_domain)\", \"\$var(auth_body)\");
   \$var(auth_reply) = \"\";
 
-  if (!http_client_query(\$var(auth_url), \$var(auth_body), \$var(auth_headers), \$var(auth_reply))) {
-    xlog(\"L_ERR\", \"MNSCloud auth API request failed for \$fU@\$fd\\n\");
+  http_client_request(\"POST\", \$var(auth_url), \$var(auth_body), \$var(auth_headers), \$var(auth_reply));
+  \$var(auth_http_code) = \$rc;
+  if (\$var(auth_http_code) < 200 || \$var(auth_http_code) >= 300) {
+    xlog(\"L_ERR\", \"MNSCloud auth API request failed for \$fU@\$fd: http=\$var(auth_http_code) curl=\$curlerror(error)\\n\");
     return(-1);
   }
 
@@ -494,8 +496,10 @@ route[API_ROUTE] {
   jansson_set(\"string\", \"destination\", \"\$var(request_user)\", \"\$var(route_body)\");
   \$var(route_reply) = \"\";
 
-  if (!http_client_query(\$var(route_url), \$var(route_body), \$var(route_headers), \$var(route_reply))) {
-    xlog(\"L_ERR\", \"MNSCloud route API request failed for \$fU -> \$rU\\n\");
+  http_client_request(\"POST\", \$var(route_url), \$var(route_body), \$var(route_headers), \$var(route_reply));
+  \$var(route_http_code) = \$rc;
+  if (\$var(route_http_code) < 200 || \$var(route_http_code) >= 300) {
+    xlog(\"L_ERR\", \"MNSCloud route API request failed for \$fU -> \$rU: http=\$var(route_http_code) curl=\$curlerror(error)\\n\");
     sl_send_reply(\"503\", \"Routing Unavailable\");
     exit;
   }
@@ -546,8 +550,10 @@ route[INBOUND_ROUTE] {
   jansson_set(\"string\", \"domain\", \"\$var(request_domain)\", \"\$var(inbound_body)\");
   \$var(inbound_reply) = \"\";
 
-  if (!http_client_query(\$var(inbound_url), \$var(inbound_body), \$var(inbound_headers), \$var(inbound_reply))) {
-    xlog(\"L_ERR\", \"MNSCloud inbound route API request failed for \$si -> \$rU\\n\");
+  http_client_request(\"POST\", \$var(inbound_url), \$var(inbound_body), \$var(inbound_headers), \$var(inbound_reply));
+  \$var(inbound_http_code) = \$rc;
+  if (\$var(inbound_http_code) < 200 || \$var(inbound_http_code) >= 300) {
+    xlog(\"L_ERR\", \"MNSCloud inbound route API request failed for \$si -> \$rU: http=\$var(inbound_http_code) curl=\$curlerror(error)\\n\");
     return(-1);
   }
 
