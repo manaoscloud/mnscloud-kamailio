@@ -425,8 +425,13 @@ route[AUTH_LOOKUP] {
     return(-1);
   }
 
-  if (!(\$var(auth_reply) =~ \"\\\"authorized\\\"[[:space:]]*:[[:space:]]*true\")) {
-    xlog(\"L_WARN\", \"MNSCloud denied subscriber \$fU@\$fd\\n\");
+  if (!jansson_get(\"authorized\", \"\$var(auth_reply)\", \"\$var(auth_authorized)\")) {
+    xlog(\"L_ERR\", \"MNSCloud auth API returned invalid JSON for \$fU@\$fd\\n\");
+    return(-2);
+  }
+
+  if (\$var(auth_authorized) != \"true\" && \$var(auth_authorized) != \"1\") {
+    xlog(\"L_WARN\", \"MNSCloud denied subscriber \$fU@\$fd (authorized=\$var(auth_authorized))\\n\");
     return(-2);
   }
 
