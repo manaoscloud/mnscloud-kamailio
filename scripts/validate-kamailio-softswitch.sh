@@ -23,8 +23,18 @@ for response_var in auth_reply route_reply inbound_reply; do
   }
 done
 
+if [[ -r "$KAMAILIO_CFG" ]]; then
+  echo "[validate-kamailio-softswitch] checking deployed HTTP runtime contract in ${KAMAILIO_CFG}"
+  for response_var in auth_reply route_reply inbound_reply; do
+    grep -Fq "\"\$var(${response_var})\"" "$KAMAILIO_CFG" || {
+      echo "[validate-kamailio-softswitch] deployed config has an unquoted or missing response variable: ${response_var}" >&2
+      exit 1
+    }
+  done
+fi
+
 if command -v kamailio >/dev/null 2>&1 && [[ -r "$KAMAILIO_CFG" ]]; then
-  echo "[validate-kamailio-softswitch] checking ${KAMAILIO_CFG}"
+  echo "[validate-kamailio-softswitch] checking Kamailio syntax in ${KAMAILIO_CFG}"
   kamailio -c -f "$KAMAILIO_CFG"
 else
   echo "[validate-kamailio-softswitch] kamailio or ${KAMAILIO_CFG} not available; skipped runtime cfg check"
