@@ -411,13 +411,18 @@ ${rtpengine_params}
 
 route[AUTH_LOOKUP] {
   \$var(from_user) = \$fU;
-  \$var(from_domain) = \$fd;
+  # REGISTER authenticates in the domain addressed by the client. The From
+  # domain frequently contains a device IP and is not the subscriber domain.
+  \$var(auth_domain) = \$fd;
+  if (is_method(\"REGISTER\")) {
+    \$var(auth_domain) = \$td;
+  }
   \$var(auth_url) = \"${API_BASE}/api/v1/softswitch/runtime/auth?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}\";
   \$var(auth_headers) = \"Content-Type: application/json\\r\\nAuthorization: Bearer ${API_TOKEN}\\r\\nX-Softswitch-Engine: ${SOFTSWITCH_ENGINE}\";
   \$var(auth_body) = '{}';
   jansson_set(\"string\", \"engine\", \"${SOFTSWITCH_ENGINE}\", \"\$var(auth_body)\");
   jansson_set(\"string\", \"username\", \"\$var(from_user)\", \"\$var(auth_body)\");
-  jansson_set(\"string\", \"domain\", \"\$var(from_domain)\", \"\$var(auth_body)\");
+  jansson_set(\"string\", \"domain\", \"\$var(auth_domain)\", \"\$var(auth_body)\");
   \$var(auth_reply) = \"\";
 
   http_client_request(\"POST\", \$var(auth_url), \$var(auth_body), \$var(auth_headers), \$var(auth_reply));
