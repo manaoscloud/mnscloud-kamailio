@@ -76,7 +76,7 @@ Authenticate GitHub CLI:
 gh auth login
 ```
 
-Clone the private repository and install:
+Clone the repository and install:
 
 ```bash
 sudo install -d -m 0755 /opt/mnscloud
@@ -120,20 +120,57 @@ configuration.
 
 ## Update
 
-Update to an explicit release, branch, tag, or commit:
+Use this recovery-safe command on every installed server. It first refreshes only the lifecycle
+scripts from the reviewed remote `main` branch, so it also works when the local checkout predates
+the update scripts. It refuses to overwrite local Git changes, resolves the published `stable`
+release, reapplies the installer, and validates the resulting runtime.
 
 ```bash
-sudo bash scripts/update-kamailio-softswitch.sh --ref v0.1.5
+sudo install -d -m 0755 /opt/mnscloud
+cd /opt/mnscloud
+
+if [ ! -d mnscloud-kamailio-softswitch/.git ]; then
+  gh repo clone manaoscloud/mnscloud-kamailio-softswitch
+fi
+
+git -C mnscloud-kamailio-softswitch diff --quiet && \
+  git -C mnscloud-kamailio-softswitch diff --cached --quiet || {
+  echo 'Local repository changes detected; commit or stash them before updating.' >&2
+  exit 1
+}
+
+git -C mnscloud-kamailio-softswitch fetch origin main --tags --prune
+git -C mnscloud-kamailio-softswitch checkout origin/main -- \
+  scripts/update-kamailio-softswitch.sh \
+  scripts/update-latest-kamailio-softswitch.sh \
+  scripts/validate-kamailio-softswitch.sh
+chmod +x mnscloud-kamailio-softswitch/scripts/{update-kamailio-softswitch,update-latest-kamailio-softswitch,validate-kamailio-softswitch}.sh
+
+cd /opt/mnscloud/mnscloud-kamailio-softswitch
+sudo bash scripts/update-latest-kamailio-softswitch.sh stable
+sudo bash scripts/validate-kamailio-softswitch.sh
 ```
 
-Update to the release manifest channel, defaulting to `stable`:
+After this first recovery-safe update, the normal channel update is:
 
 ```bash
 sudo bash scripts/update-latest-kamailio-softswitch.sh stable
+sudo bash scripts/validate-kamailio-softswitch.sh
+```
+
+To update to an explicit release, branch, tag, or commit, first run the recovery-safe bootstrap
+above and then use:
+
+```bash
+sudo bash scripts/update-kamailio-softswitch.sh --ref <git-ref>
+sudo bash scripts/validate-kamailio-softswitch.sh
 ```
 
 Both update flows fetch the repository, checkout the target ref, rerun the installer, and then run
-the validator. Existing local state under `/etc/mnscloud/softswitch` is reused.
+the validator. Existing local state under `/etc/mnscloud/softswitch` is reused. The validator
+accepts the supported Kamailio 6.1 `http_client_query` or `http_client_request` call style, but
+requires a single consistent style for all three runtime callbacks and quoted writable response
+variables.
 
 ## Rollback
 

@@ -40,6 +40,10 @@ done
 [[ "$REF" =~ ^[A-Za-z0-9._/@+-]+$ ]] || { echo "[update-kamailio-softswitch] invalid ref: $REF" >&2; exit 2; }
 
 cd "$ROOT_DIR"
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "[update-kamailio-softswitch] local repository changes detected; commit or stash them before updating." >&2
+  exit 1
+fi
 git fetch --all --tags --prune
 git -c advice.detachedHead=false checkout "$REF"
 
