@@ -22,7 +22,11 @@ validate_http_client_calls() {
   request_calls="$(grep -Fc 'http_client_request(' "$target" || true)"
 
   if [[ "$query_calls" == "3" && "$request_calls" == "0" ]]; then
-    grep -Fq 'modparam(\"http_client\", \"query_result\", 0)' "$target" || {
+    # The installer heredoc keeps quotes escaped, while the deployed Kamailio
+    # configuration contains literal quotes. Validate the same required option
+    # in either representation so a healthy runtime is never reported as bad.
+    { grep -Fq 'modparam(\"http_client\", \"query_result\", 0)' "$target" ||
+      grep -Fq 'modparam("http_client", "query_result", 0)' "$target"; } || {
       echo "[validate-kamailio-softswitch] ${scope} uses http_client_query without query_result=0" >&2
       exit 1
     }
