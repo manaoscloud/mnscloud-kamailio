@@ -120,10 +120,11 @@ configuration.
 
 ## Update
 
-Use this recovery-safe command on every installed server. It first refreshes only the lifecycle
-scripts from the reviewed remote `main` branch, so it also works when the local checkout predates
-the update scripts. It refuses to overwrite local Git changes, resolves the published `stable`
-release, reapplies the installer, and validates the resulting runtime.
+Use this recovery-safe command on every installed server. It first inspects local Git changes. If
+the changes are only in managed lifecycle scripts, it creates an audit backup under
+`/var/backups/mnscloud/kamailio-softswitch/`, restores just those scripts from reviewed
+`origin/main`, resolves the published `stable` release, reapplies the installer, and validates the
+resulting runtime. Any local change outside the lifecycle-script allowlist remains blocked.
 
 ```bash
 sudo install -d -m 0755 /opt/mnscloud
@@ -133,18 +134,27 @@ if [ ! -d mnscloud-kamailio-softswitch/.git ]; then
   gh repo clone manaoscloud/mnscloud-kamailio-softswitch
 fi
 
-git -C mnscloud-kamailio-softswitch diff --quiet && \
-  git -C mnscloud-kamailio-softswitch diff --cached --quiet || {
-  echo 'Local repository changes detected; commit or stash them before updating.' >&2
+sudo bash -s -- /opt/mnscloud/mnscloud-kamailio-softswitch <<'RECOVERY'
+set -Eeuo pipefail
+repo="$1"
+cd "$repo"
+git fetch origin main --tags --prune
+
+changed_paths="$(git diff --name-only; git diff --cached --name-only)"
+unexpected_paths="$(printf '%s\n' "$changed_paths" | awk 'NF' | sort -u | grep -vE '^scripts/(update-kamailio-softswitch|update-latest-kamailio-softswitch|validate-kamailio-softswitch|rollback-kamailio-softswitch)\.sh$' || true)"
+test -z "$unexpected_paths" || {
+  printf 'Unexpected local changes:\n%s\n' "$unexpected_paths" >&2
   exit 1
 }
 
-git -C mnscloud-kamailio-softswitch fetch origin main --tags --prune
-git -C mnscloud-kamailio-softswitch checkout origin/main -- \
-  scripts/update-kamailio-softswitch.sh \
-  scripts/update-latest-kamailio-softswitch.sh \
-  scripts/validate-kamailio-softswitch.sh
-chmod +x mnscloud-kamailio-softswitch/scripts/{update-kamailio-softswitch,update-latest-kamailio-softswitch,validate-kamailio-softswitch}.sh
+backup_dir="/var/backups/mnscloud/kamailio-softswitch/lifecycle-$(date -u +%Y%m%dT%H%M%SZ)"
+install -d -m 0750 "$backup_dir/files"
+printf '%s\n' "$changed_paths" | awk 'NF' | sort -u >"$backup_dir/changed-paths.txt"
+git diff --binary >"$backup_dir/worktree.patch"
+git diff --cached --binary >"$backup_dir/index.patch"
+git checkout origin/main -- scripts/{update-kamailio-softswitch,update-latest-kamailio-softswitch,validate-kamailio-softswitch,rollback-kamailio-softswitch}.sh
+chmod +x scripts/{update-kamailio-softswitch,update-latest-kamailio-softswitch,validate-kamailio-softswitch,rollback-kamailio-softswitch}.sh
+RECOVERY
 
 cd /opt/mnscloud/mnscloud-kamailio-softswitch
 sudo bash scripts/update-latest-kamailio-softswitch.sh stable
@@ -167,7 +177,9 @@ sudo bash scripts/validate-kamailio-softswitch.sh
 ```
 
 Both update flows fetch the repository, checkout the target ref, rerun the installer, and then run
-the validator. Existing local state under `/etc/mnscloud/softswitch` is reused. The validator
+the validator. The updater automatically backs up and restores only managed lifecycle script drift;
+it still fail-closes for all other local source changes. Existing local state under
+`/etc/mnscloud/softswitch` is reused. The validator
 accepts the supported Kamailio 6.1 `http_client_query` or `http_client_request` call style, but
 requires a single consistent style for all three runtime callbacks and quoted writable response
 variables.
