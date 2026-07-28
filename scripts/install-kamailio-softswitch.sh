@@ -22,6 +22,9 @@ KAMAILIO_RUNTIME_KIT_REPO_URL="${KAMAILIO_RUNTIME_KIT_REPO_URL:-https://github.c
 KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
 KAMAILIO_RUNTIME_KIT_REF="${KAMAILIO_RUNTIME_KIT_REF:-}"
 AGENT_VALIDATOR="/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh"
+KAMAILIO_PIKE_SAMPLING_TIME_UNIT="${MNSCLOUD_KAMAILIO_PIKE_SAMPLING_TIME_UNIT:-2}"
+KAMAILIO_PIKE_REQUEST_DENSITY="${MNSCLOUD_KAMAILIO_PIKE_REQUEST_DENSITY:-30}"
+KAMAILIO_PIKE_REMOVE_LATENCY="${MNSCLOUD_KAMAILIO_PIKE_REMOVE_LATENCY:-120}"
 
 validate_mnscloud_agent() {
   if [[ "$DRY_RUN" == true ]]; then
@@ -41,6 +44,20 @@ normalize_url() {
 
 validate_api_base() {
   [[ "$1" =~ ^https?://[^[:space:]/]+(:[0-9]+)?(/[^[:space:]]*)?$ ]]
+}
+
+validate_pike_settings() {
+  local name value
+  for name in \
+    KAMAILIO_PIKE_SAMPLING_TIME_UNIT \
+    KAMAILIO_PIKE_REQUEST_DENSITY \
+    KAMAILIO_PIKE_REMOVE_LATENCY; do
+    value="${!name}"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || {
+      err "${name} must be a positive integer; received: ${value}"
+      return 1
+    }
+  done
 }
 
 prompt_api_base() {
@@ -388,6 +405,7 @@ loadmodule \"textops.so\"
 loadmodule \"siputils.so\"
 loadmodule \"xlog.so\"
 loadmodule \"pv.so\"
+loadmodule \"pike.so\"
 loadmodule \"auth.so\"
 loadmodule \"usrloc.so\"
 loadmodule \"registrar.so\"
@@ -405,6 +423,9 @@ modparam(\"registrar\", \"max_contacts\", 1)
 modparam(\"auth\", \"nonce_expire\", 300)
 modparam(\"auth\", \"qop\", \"auth\")
 modparam(\"http_client\", \"query_result\", 0)
+modparam(\"pike\", \"sampling_time_unit\", ${KAMAILIO_PIKE_SAMPLING_TIME_UNIT})
+modparam(\"pike\", \"reqs_density_per_unit\", ${KAMAILIO_PIKE_REQUEST_DENSITY})
+modparam(\"pike\", \"remove_latency\", ${KAMAILIO_PIKE_REMOVE_LATENCY})
 modparam(\"uac\", \"reg_timer_interval\", 60)
 modparam(\"uac\", \"reg_retry_interval\", 300)
 ${rtpengine_params}
@@ -609,6 +630,12 @@ request_route {
   if (!mf_process_maxfwd_header(\"10\")) { sl_send_reply(\"483\", \"Too Many Hops\"); exit; }
   if (is_method(\"OPTIONS\")) { sl_send_reply(\"200\", \"OK\"); exit; }
 
+  # Keep unauthenticated SIP floods from exhausting the authenticated runtime API.
+  if (is_method(\"REGISTER|INVITE\") && !pike_check_req()) {
+    xlog(\"L_WARN\", \"MNSCloud dropped SIP flood: method=\$rm source=\$si\\n\");
+    exit;
+  }
+
   if (has_totag()) {
     if (!loose_route()) {
       sl_send_reply(\"404\", \"Not Here\");
@@ -680,6 +707,7 @@ main() {
   ensure_api_base_file
   ensure_node_uuid_file
   ensure_api_token_file
+  validate_pike_settings
   run "install -d -m 0750 '/etc/mnscloud/softswitch/runtime'"
   run "chown root:root '/etc/mnscloud/softswitch/runtime'"
   case "$(detect_kamailio_os)" in

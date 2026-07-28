@@ -11,6 +11,8 @@ bash -n "$(dirname "$0")/sync-kamailio-softswitch-runtime.sh"
 installer="$(dirname "$0")/install-kamailio-softswitch.sh"
 echo "[validate-kamailio-softswitch] checking Kamailio HTTP runtime template"
 grep -Fq 'modparam(\"http_client\", \"query_result\", 0)' "$installer"
+grep -Fq 'loadmodule \"pike.so\"' "$installer"
+grep -Fq 'pike_check_req()' "$installer"
 query_calls="$(grep -Fc 'http_client_query(' "$installer")"
 [[ "$query_calls" == "3" ]] || {
   echo "[validate-kamailio-softswitch] expected three http_client_query calls, found ${query_calls}" >&2
@@ -24,7 +26,15 @@ for response_var in auth_reply route_reply inbound_reply; do
 done
 
 if [[ -r "$KAMAILIO_CFG" ]]; then
-  echo "[validate-kamailio-softswitch] checking deployed HTTP runtime contract in ${KAMAILIO_CFG}"
+  echo "[validate-kamailio-softswitch] checking deployed runtime contract in ${KAMAILIO_CFG}"
+  grep -Fq 'loadmodule "pike.so"' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing pike.so" >&2
+    exit 1
+  }
+  grep -Fq 'pike_check_req()' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing pike request protection" >&2
+    exit 1
+  }
   for response_var in auth_reply route_reply inbound_reply; do
     grep -Fq "\"\$var(${response_var})\"" "$KAMAILIO_CFG" || {
       echo "[validate-kamailio-softswitch] deployed config has an unquoted or missing response variable: ${response_var}" >&2
