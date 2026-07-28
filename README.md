@@ -162,6 +162,11 @@ See `kamailio.md` and `SECURITY.md` for details.
   any runtime API callback. Defaults are a 2-second sampling window, density 30, and 120-second
   cleanup; tune only through `MNSCLOUD_KAMAILIO_PIKE_*` environment variables when a measured
   traffic profile requires it.
+- Authorization denials are emitted as structured `MNSCloud SIP edge denied` logs. When the host
+  is assigned the `softswitch-edge` Cyber Security profile, the Agent forwards those events to
+  CrowdSec so repeated source-IP abuse can be blocked by the managed edge policy. A runtime API
+  `429` is translated to SIP `503` with `Retry-After`; it is an availability limit, not an
+  invalid subscriber credential.
 - SIP INVITE from subscribers is also proxy-authenticated before local lookup or outbound routing.
 - Local subscriber-to-subscriber calls use Kamailio `usrloc` after authentication.
 - Outbound calls use `/api/v1/softswitch/runtime/route`; the API remains responsible for tenant,
