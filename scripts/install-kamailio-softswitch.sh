@@ -426,7 +426,7 @@ route[AUTH_LOOKUP] {
   \$var(auth_reply) = \"\";
 
   # http_client_query supports POST bodies and returns the HTTP response code in
-  # $rc. Keep this contract because authorization must distinguish a transport
+  # \$rc. Keep this contract because authorization must distinguish a transport
   # failure from an API denial before challenging the SIP client.
   http_client_query(\$var(auth_url), \$var(auth_body), \$var(auth_headers), \$var(auth_reply));
   \$var(auth_http_code) = \$rc;
