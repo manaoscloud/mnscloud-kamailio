@@ -26,6 +26,14 @@ outros serviços que precisem ancorar mídia.
   RTP/SRTP via `mnscloud-media`/`rtpengine`.
 - `VoipSoftswitchAccount`: vínculo tenant, cliente, domínio e servidor usado para autorizar domínios e assinantes.
 
+## Diagnóstico de assinantes
+
+O status de registro é consultado pelo Agent associado ao servidor, nunca pelo navegador. A API cria
+um job tipado e auditável para um assinante ou para a conta inteira. No host, o comando local
+`kamailio-subscriber-runtime-status.sh` recebe uma lista limitada de identidades e consulta apenas
+`kamcmd ul.lookup location sip:<usuario>@<dominio>`. O retorno contém presença e contato registrado,
+sem senha SIP, token da API ou capacidade de executar comandos arbitrários.
+
 ## Endpoints Runtime
 
 Os endpoints internos ficam em:

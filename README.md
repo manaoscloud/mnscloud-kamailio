@@ -45,6 +45,13 @@ contract. It can run on MNSCloud, customer, or partner infrastructure.
   engine in the control plane, but requires its own autonomous connector before
   an install command can be generated.
 
+## Subscriber runtime status
+
+Subscriber registration status is collected only by the enrolled `mnscloud-agent`. The API queues a
+typed, tenant-scoped diagnostic for one subscriber or all subscribers in an account; the Agent invokes
+`scripts/kamailio-subscriber-runtime-status.sh`, which performs bounded read-only `kamcmd ul.lookup`
+queries. The browser never receives a shell command, Agent token, or subscriber password.
+
 The API/control plane must be deployed with the canonical softswitch runtime contract before this
 connector is installed or updated. This connector does not call engine-specific legacy runtime
 endpoints.

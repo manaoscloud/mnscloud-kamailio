@@ -7,6 +7,7 @@ echo "[validate-kamailio-softswitch] checking shell scripts"
 bash -n "$(dirname "$0")/install-kamailio-softswitch.sh"
 bash -n "$(dirname "$0")/release-kamailio-softswitch.sh"
 bash -n "$(dirname "$0")/sync-kamailio-softswitch-runtime.sh"
+bash -n "$(dirname "$0")/kamailio-subscriber-runtime-status.sh"
 bash -n "$(dirname "$0")/update-kamailio-softswitch.sh"
 bash -n "$(dirname "$0")/update-latest-kamailio-softswitch.sh"
 bash -n "$(dirname "$0")/rollback-kamailio-softswitch.sh"
@@ -49,7 +50,11 @@ for response_var in auth_reply route_reply inbound_reply; do
   }
 done
 
-if [[ -r "$KAMAILIO_CFG" ]]; then
+is_managed_runtime_config() {
+  [[ -r "$1" ]] && grep -Fq '# MNSCloud managed Kamailio Softswitch runtime' "$1"
+}
+
+if is_managed_runtime_config "$KAMAILIO_CFG"; then
   echo "[validate-kamailio-softswitch] checking deployed runtime contract in ${KAMAILIO_CFG}"
   grep -Fq 'loadmodule "pike.so"' "$KAMAILIO_CFG" || {
     echo "[validate-kamailio-softswitch] deployed config is missing pike.so" >&2
@@ -66,13 +71,15 @@ if [[ -r "$KAMAILIO_CFG" ]]; then
       exit 1
     }
   done
+elif [[ -r "$KAMAILIO_CFG" ]]; then
+  echo "[validate-kamailio-softswitch] ${KAMAILIO_CFG} is not an MNSCloud managed runtime; skipped deployed runtime contract"
 fi
 
-if command -v kamailio >/dev/null 2>&1 && [[ -r "$KAMAILIO_CFG" ]]; then
+if command -v kamailio >/dev/null 2>&1 && is_managed_runtime_config "$KAMAILIO_CFG"; then
   echo "[validate-kamailio-softswitch] checking Kamailio syntax in ${KAMAILIO_CFG}"
   kamailio -c -f "$KAMAILIO_CFG"
 else
-  echo "[validate-kamailio-softswitch] kamailio or ${KAMAILIO_CFG} not available; skipped runtime cfg check"
+  echo "[validate-kamailio-softswitch] managed Kamailio runtime config not available; skipped syntax check"
 fi
 
 if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files kamailio.service >/dev/null 2>&1; then

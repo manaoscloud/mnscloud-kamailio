@@ -29,6 +29,9 @@ monorepo at runtime.
   `scripts/update-kamailio-softswitch.sh`, `scripts/update-latest-kamailio-softswitch.sh`, and
   `scripts/rollback-kamailio-softswitch.sh`
 - Runtime API consumer: MNSCloud Softswitch endpoints under `/api/v1/softswitch/runtime/*`
+- Subscriber diagnostics: `scripts/kamailio-subscriber-runtime-status.sh` is invoked only by the
+  enrolled Agent with a bounded structured input. It may use only read-only `kamcmd ul.lookup` queries;
+  do not add browser-provided shell commands or credential output.
 - Runtime engine: `kamailio`; do not reintroduce engine-specific legacy runtime endpoints.
 - Local state prefix: `/etc/mnscloud/softswitch`
 - WebRTC SIP/WSS and local WebRTC TLS are not owned by this generic connector; use

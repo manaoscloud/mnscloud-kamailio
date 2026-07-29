@@ -390,6 +390,7 @@ onreply_route[MEDIA_ANSWER] {
 '
   fi
   write_file "$cfg" "#!KAMAILIO
+# MNSCloud managed Kamailio Softswitch runtime
 
 listen=udp:0.0.0.0:5060
 listen=tcp:0.0.0.0:5060
