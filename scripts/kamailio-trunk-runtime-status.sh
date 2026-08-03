@@ -21,6 +21,10 @@ while IFS= read -r trunk; do
     elif [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered' <<<"$entry"; then
       status=not_registered; detail='Kamailio has no active trunk registration.'
       runtime_error="$(tr '\n' ' ' <<<"${entry:-$result}" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)"
+      if grep -Eqi 'command uac\.reg_info not found' <<<"$result"; then
+        methods="$(timeout 5 kamcmd system.listMethods 2>&1 | grep -E '(^|[[:space:]])(uac\.|system\.)' | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180 || true)"
+        runtime_error="UAC registration RPC is unavailable in the running Kamailio process.${methods:+ Available RPCs: ${methods}}"
+      fi
     else
       status=unknown; detail='Kamailio could not determine the trunk registration state.'
       runtime_error="$(tr '\n' ' ' <<<"$result" | sed -E 's/[[:space:]]+/ /g' | cut -c1-300)"
