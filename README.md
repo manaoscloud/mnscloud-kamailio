@@ -50,6 +50,9 @@ contract. It can run on MNSCloud, customer, or partner infrastructure.
 Subscriber registration status is collected only by the enrolled `mnscloud-agent`. The API queues a
 typed, tenant-scoped diagnostic for one subscriber or all subscribers in an account; the Agent invokes
 `scripts/kamailio-subscriber-runtime-status.sh`, which performs bounded read-only `kamcmd ul.lookup`
+queries. Trunk diagnostics use `scripts/kamailio-trunk-runtime-status.sh`; it accepts only bounded,
+validated Agent input and invokes the fixed local `kamcmd uac.reg_info` query. OpenSIPS trunk status
+is intentionally unsupported and fails closed in the Agent.
 queries. The browser never receives a shell command, Agent token, or subscriber password.
 
 The API/control plane must be deployed with the canonical softswitch runtime contract before this

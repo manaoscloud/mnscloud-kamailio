@@ -31,6 +31,8 @@ outros serviços que precisem ancorar mídia.
 O status de registro é consultado pelo Agent associado ao servidor, nunca pelo navegador. A API cria
 um job tipado e auditável para um assinante ou para a conta inteira. No host, o comando local
 `kamailio-subscriber-runtime-status.sh` recebe uma lista limitada de identidades e consulta apenas
+o registro local. `kamailio-trunk-runtime-status.sh` segue o mesmo contrato via Agent para trunks
+em modo `register`; trunks `ip_acl`/`none` retornam `not_applicable`. OpenSIPS permanece fail-closed.
 `kamcmd ul.lookup location sip:<usuario>@<dominio>`. O retorno contém presença e contato registrado,
 sem senha SIP, token da API ou capacidade de executar comandos arbitrários.
 
