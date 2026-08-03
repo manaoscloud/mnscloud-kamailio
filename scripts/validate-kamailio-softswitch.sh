@@ -88,4 +88,12 @@ if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files kamailio.se
   systemctl is-active kamailio >/dev/null 2>&1 || true
 fi
 
+if command -v kamcmd >/dev/null 2>&1 && is_managed_runtime_config "$KAMAILIO_CFG"; then
+  echo "[validate-kamailio-softswitch] checking required UAC RPC contract"
+  kamcmd system.listMethods | grep -Fxq 'uac.reg_info' || {
+    echo "[validate-kamailio-softswitch] running Kamailio does not expose uac.reg_info" >&2
+    exit 1
+  }
+fi
+
 echo "[validate-kamailio-softswitch] ok"

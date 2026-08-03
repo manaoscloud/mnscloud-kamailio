@@ -31,8 +31,16 @@ registration_fingerprint() {
 
 remove_registration() {
   local id="$1"
-  kamcmd uac.reg_unregister "$id" >/dev/null 2>&1 || true
+  kamcmd uac.reg_unregister l_uuid "$id" >/dev/null 2>&1 || true
   kamcmd uac.reg_remove "$id" >/dev/null 2>&1 || true
+}
+
+registration_exists() {
+  local id="$1"
+  # The UAC RPC contract filters remote registrations by attribute and value.
+  # Do not trust the local fingerprint cache when the running Kamailio process
+  # has lost its in-memory registration table after a restart.
+  kamcmd uac.reg_info l_uuid "$id" >/dev/null 2>&1
 }
 
 while IFS= read -r id; do
@@ -68,11 +76,11 @@ while IFS= read -r item; do
   }
   case "$transport" in udp|tcp|tls) ;; *) echo "runtime registration payload contains invalid transport" >&2; exit 1 ;; esac
   previous_fingerprint="$(jq -r --arg id "$id" '.registrations[]? | select(.registrationUUID == $id) | .fingerprint // empty' <<<"$state_payload")"
-  if [[ "$fingerprint" != "$previous_fingerprint" ]]; then
+  if [[ "$fingerprint" != "$previous_fingerprint" ]] || ! registration_exists "$id"; then
     remove_registration "$id"
     [[ -n "$proxy" ]] || proxy="sip:${host}:${port};transport=${transport}"
     kamcmd uac.reg_add "$id" "$local_user" "$local_domain" "$username" "$host" "$realm" "$username" "$password" . "$proxy" "$expires" 0 0 . . >/dev/null
-    kamcmd uac.reg_register "$id" >/dev/null
+    kamcmd uac.reg_register l_uuid "$id" >/dev/null
   fi
   $first_registration || printf ',' >> "$next_state"
   first_registration=false
