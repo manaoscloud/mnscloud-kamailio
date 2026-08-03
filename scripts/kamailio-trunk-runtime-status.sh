@@ -11,15 +11,16 @@ while IFS= read -r trunk; do
   [[ "$uuid" =~ ^[A-Za-z0-9-]{1,64}$ && "$name" =~ ^[A-Za-z0-9._-]{1,100}$ && "$mode" =~ ^(register|ip_acl|none)$ ]] || { echo 'Invalid trunk diagnostic target.' >&2; exit 65; }
   status='not_applicable'; detail='Registration is not configured.'; runtime_error=''
   if [[ "$mode" == register ]]; then
-    # The synchronizer registers UAC entries by registrationUUID (the trunk UUID), never by
-    # the human-facing trunk name.  The UUID is Agent-supplied and validated above.
+    # Kamailio 6.1 exposes the UAC registry through reg_list; reg_info is not available in
+    # every packaged build. The synchronizer uses the UUID as its registration identifier.
     result=''; command_status=0
-    result="$(timeout 5 kamcmd uac.reg_info "$uuid" 2>&1)" || command_status=$?
-    if grep -Eqi 'registered|state[=: ]+ok' <<<"$result"; then status=registered; detail='Kamailio registration is active.'
-    elif grep -Eqi 'registering|trying' <<<"$result"; then status=registering; detail='Kamailio is registering the trunk.'
-    elif grep -Eqi 'not found|no such|does not exist|not registered' <<<"$result"; then
+    result="$(timeout 5 kamcmd uac.reg_list 2>&1)" || command_status=$?
+    entry="$(grep -i -A 12 -B 1 -- "$uuid" <<<"$result" || true)"
+    if grep -Eqi 'registered|state[=: ]+ok' <<<"$entry"; then status=registered; detail='Kamailio registration is active.'
+    elif grep -Eqi 'registering|trying' <<<"$entry"; then status=registering; detail='Kamailio is registering the trunk.'
+    elif [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered' <<<"$entry"; then
       status=not_registered; detail='Kamailio has no active trunk registration.'
-      runtime_error="$(tr '\n' ' ' <<<"$result" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)"
+      runtime_error="$(tr '\n' ' ' <<<"${entry:-$result}" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)"
     else
       status=unknown; detail='Kamailio could not determine the trunk registration state.'
       runtime_error="$(tr '\n' ' ' <<<"$result" | sed -E 's/[[:space:]]+/ /g' | cut -c1-300)"
