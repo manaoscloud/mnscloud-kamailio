@@ -11,8 +11,6 @@ NODE_UUID_FILE="/etc/mnscloud/softswitch/node.uuid"
 API_TOKEN_FILE="/etc/mnscloud/softswitch/api.token"
 API_BASE_FILE="/etc/mnscloud/softswitch/api.base"
 MEDIA_SOCKET_FILE="/etc/mnscloud/softswitch/media.socket"
-UAC_REG_DB_FILE="/etc/mnscloud/softswitch/runtime/uacreg.sqlite"
-UAC_REG_CONTACT_ADDR="${MNSCLOUD_UAC_REG_CONTACT_ADDR:-}"
 DEFAULT_API_BASE="${MNSCLOUD_API_BASE:-https://api.example.com}"
 SOFTSWITCH_ENGINE="${SOFTSWITCH_ENGINE:-kamailio}"
 NODE_UUID="${MNSCLOUD_SOFTSWITCH_NODE_UUID:-}"
@@ -299,15 +297,6 @@ install_packages_rocky() {
   MNSCLOUD_KAMAILIO_PACKAGE_PROFILE=core mrtk_ensure_kamailio
 }
 
-ensure_uac_registration_cache() {
-  command -v sqlite3 >/dev/null 2>&1 || { err "sqlite3 is required for the Kamailio UAC registration cache"; return 1; }
-  if [[ -z "$UAC_REG_CONTACT_ADDR" ]]; then UAC_REG_CONTACT_ADDR="$(public_ipv4)"; fi
-  [[ -n "$UAC_REG_CONTACT_ADDR" ]] || UAC_REG_CONTACT_ADDR="$(private_ipv4)"
-  [[ "$UAC_REG_CONTACT_ADDR" =~ ^[0-9A-Fa-f:.]+$ ]] || { err "unable to resolve UAC registration contact address"; return 1; }
-  run "sqlite3 '${UAC_REG_DB_FILE}' 'CREATE TABLE IF NOT EXISTS uacreg (id INTEGER PRIMARY KEY NOT NULL,l_uuid VARCHAR(64) NOT NULL UNIQUE,l_username VARCHAR(64) NOT NULL,l_domain VARCHAR(64) NOT NULL,r_username VARCHAR(64) NOT NULL,r_domain VARCHAR(64) NOT NULL,realm VARCHAR(64) NOT NULL,auth_username VARCHAR(64) NOT NULL,auth_password VARCHAR(64) NOT NULL,auth_ha1 VARCHAR(128) NOT NULL,auth_proxy VARCHAR(255) NOT NULL,expires INTEGER NOT NULL,flags INTEGER NOT NULL,reg_delay INTEGER NOT NULL,contact_addr VARCHAR(255) NOT NULL,socket VARCHAR(128) NOT NULL);'"
-  run "chown root:root '${UAC_REG_DB_FILE}' && chmod 0640 '${UAC_REG_DB_FILE}'"
-}
-
 stop_existing_kamailio() {
   if ! command -v systemctl >/dev/null 2>&1; then
     return 0
@@ -427,7 +416,6 @@ loadmodule \"corex.so\"
 loadmodule \"ctl.so\"
 loadmodule \"http_client.so\"
 loadmodule \"jansson.so\"
-loadmodule \"db_sqlite.so\"
 loadmodule \"uac.so\"
 ${rtpengine_modules}
 
@@ -441,8 +429,6 @@ modparam(\"pike\", \"reqs_density_per_unit\", ${KAMAILIO_PIKE_REQUEST_DENSITY})
 modparam(\"pike\", \"remove_latency\", ${KAMAILIO_PIKE_REMOVE_LATENCY})
 modparam(\"uac\", \"reg_timer_interval\", 60)
 modparam(\"uac\", \"reg_retry_interval\", 300)
-modparam(\"uac\", \"reg_db_url\", \"sqlite://${UAC_REG_DB_FILE}\")
-modparam(\"uac\", \"reg_contact_addr\", \"${UAC_REG_CONTACT_ADDR}\")
 ${rtpengine_params}
 
 route[AUTH_LOOKUP] {
@@ -743,7 +729,6 @@ main() {
     debian) install_packages_debian ;;
     rocky) install_packages_rocky ;;
   esac
-  ensure_uac_registration_cache
   stop_existing_kamailio
   bootstrap_node_via_api || true
   write_kamailio_config
