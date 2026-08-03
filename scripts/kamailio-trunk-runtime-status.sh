@@ -11,10 +11,10 @@ while IFS= read -r trunk; do
   [[ "$uuid" =~ ^[A-Za-z0-9-]{1,64}$ && "$name" =~ ^[A-Za-z0-9._-]{1,100}$ && "$mode" =~ ^(register|ip_acl|none)$ ]] || { echo 'Invalid trunk diagnostic target.' >&2; exit 65; }
   status='not_applicable'; detail='Registration is not configured.'; runtime_error=''
   if [[ "$mode" == register ]]; then
-    # Kamailio 6.1 exposes the UAC registry through reg_list; reg_info is not available in
-    # every packaged build. The synchronizer uses the UUID as its registration identifier.
+    # reg_dump is the portable UAC RPC table view. The synchronizer uses the UUID as its
+    # registration identifier; avoid build-specific reg_info/reg_list RPC variants.
     result=''; command_status=0
-    result="$(timeout 5 kamcmd uac.reg_list 2>&1)" || command_status=$?
+    result="$(timeout 5 kamcmd uac.reg_dump 2>&1)" || command_status=$?
     entry="$(grep -i -A 12 -B 1 -- "$uuid" <<<"$result" || true)"
     if grep -Eqi 'registered|state[=: ]+ok' <<<"$entry"; then status=registered; detail='Kamailio registration is active.'
     elif grep -Eqi 'registering|trying' <<<"$entry"; then status=registering; detail='Kamailio is registering the trunk.'
