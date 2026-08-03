@@ -18,6 +18,19 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
 fi
 LOG_FILE="${LOG_FILE:-$DEFAULT_LOG_FILE}"
 
+on_install_error() {
+  local rc="$?" line="${1:-unknown}"
+  err "Installer stopped at line ${line} (exit=${rc})."
+  err "Guidance: review the preceding command output, correct its prerequisite, then rerun the same lifecycle command."
+  [[ -r "$LOG_FILE" ]] && {
+    echo "[installer-diagnostic] last 120 log lines follow:" >&2
+    tail -n 120 "$LOG_FILE" >&2 || true
+  }
+  exit "$rc"
+}
+
+trap 'on_install_error $LINENO' ERR
+
 _ts() { date +"%Y-%m-%d %H:%M:%S"; }
 
 log_raw() { printf "[%s] %s %s\n" "$(_ts)" "$1" "$2" >> "$LOG_FILE" || true; }
