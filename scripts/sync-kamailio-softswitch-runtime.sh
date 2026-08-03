@@ -16,13 +16,17 @@ api_base="$(read_value "$API_BASE_FILE")"
 node_uuid="$(read_value "$NODE_UUID_FILE")"
 api_token="$(read_value "$API_TOKEN_FILE")"
 install -d -m 0750 "$(dirname "$STATE_FILE")"
-response="$(mktemp)"
-trap 'rm -f "$response"' EXIT
-http_code="$(curl -sS -o "$response" -w '%{http_code}' -X POST "${api_base%/}/api/v1/softswitch/runtime/registrations?node_uuid=${node_uuid}&engine=kamailio" -H "Authorization: Bearer ${api_token}" -H 'X-Softswitch-Engine: kamailio' -H 'Content-Type: application/json' --data '{"engine":"kamailio"}')"
-[[ "$http_code" =~ ^2 ]] || { echo "runtime registration fetch failed: HTTP ${http_code}" >&2; exit 1; }
-jq -e '.status == "success" and (.data.registrations | type == "array")' "$response" >/dev/null
 state_payload='{"registrations":[]}'
 [[ -r "$STATE_FILE" ]] && state_payload="$(cat "$STATE_FILE")"
+previous_revision="$(jq -r '.revision // empty' <<<"$state_payload")"
+response="$(mktemp)"
+trap 'rm -f "$response"' EXIT
+request_headers=(-H "Authorization: Bearer ${api_token}" -H 'X-Softswitch-Engine: kamailio' -H 'Content-Type: application/json')
+[[ -n "$previous_revision" ]] && request_headers+=(-H "If-None-Match: \"${previous_revision}\"")
+http_code="$(curl -sS -o "$response" -w '%{http_code}' -X POST "${api_base%/}/api/v1/softswitch/runtime/registrations?node_uuid=${node_uuid}&engine=kamailio" "${request_headers[@]}" --data '{"engine":"kamailio"}')"
+[[ "$http_code" == 304 ]] && { echo '[sync-kamailio-softswitch-runtime] registration snapshot unchanged'; exit 0; }
+[[ "$http_code" =~ ^2 ]] || { echo "runtime registration fetch failed: HTTP ${http_code}" >&2; exit 1; }
+jq -e '.status == "success" and (.data.registrations | type == "array")' "$response" >/dev/null
 
 registration_fingerprint() {
   jq -cS '{registrationUUID, host, port, transport, outboundProxy, username, password, realm, fromDomain, registrationExpires}' \
@@ -52,7 +56,7 @@ done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload"
 
 next_state="$(mktemp)"
 trap 'rm -f "$response" "$next_state"' EXIT
-printf '{"registrations":[' > "$next_state"
+printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$response")" > "$next_state"
 first_registration=true
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
