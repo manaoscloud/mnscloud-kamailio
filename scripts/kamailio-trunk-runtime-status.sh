@@ -17,7 +17,9 @@ while IFS= read -r trunk; do
     result="$(timeout 5 kamcmd uac.reg_info "$uuid" 2>&1)" || command_status=$?
     if grep -Eqi 'registered|state[=: ]+ok' <<<"$result"; then status=registered; detail='Kamailio registration is active.'
     elif grep -Eqi 'registering|trying' <<<"$result"; then status=registering; detail='Kamailio is registering the trunk.'
-    elif grep -Eqi 'not found|no such|does not exist|not registered' <<<"$result"; then status=not_registered; detail='Kamailio has no active trunk registration.'
+    elif grep -Eqi 'not found|no such|does not exist|not registered' <<<"$result"; then
+      status=not_registered; detail='Kamailio has no active trunk registration.'
+      runtime_error="$(tr '\n' ' ' <<<"$result" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)"
     else
       status=unknown; detail='Kamailio could not determine the trunk registration state.'
       runtime_error="$(tr '\n' ' ' <<<"$result" | sed -E 's/[[:space:]]+/ /g' | cut -c1-300)"
