@@ -19,6 +19,7 @@ API_BASE=""
 API_TOKEN="${MNSCLOUD_SOFTSWITCH_API_TOKEN:-}"
 MEDIA_SOCKET=""
 UAC_CONTACT_ADDR="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}"
+UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
 KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}"
 KAMAILIO_RUNTIME_KIT_REPO_URL="${KAMAILIO_RUNTIME_KIT_REPO_URL:-https://github.com/manaoscloud/mnscloud-runtime-kit.git}"
 KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
@@ -60,6 +61,13 @@ validate_pike_settings() {
       return 1
     }
   done
+}
+
+validate_uac_default_socket() {
+  [[ "${UAC_DEFAULT_SOCKET}" =~ ^(udp|tcp):[^[:space:]]+:[0-9]{1,5}$ ]] || {
+    err "MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET must be udp|tcp:host:port; received: ${UAC_DEFAULT_SOCKET}"
+    return 1
+  }
 }
 
 normalize_uac_contact_addr() {
@@ -509,6 +517,7 @@ modparam(\"pike\", \"reqs_density_per_unit\", ${KAMAILIO_PIKE_REQUEST_DENSITY})
 modparam(\"pike\", \"remove_latency\", ${KAMAILIO_PIKE_REMOVE_LATENCY})
 modparam(\"uac\", \"reg_db_url\", \"text://${UAC_DB_TEXT_DIR}\")
 modparam(\"uac\", \"reg_contact_addr\", \"${UAC_CONTACT_ADDR}\")
+modparam(\"uac\", \"default_socket\", \"${UAC_DEFAULT_SOCKET}\")
 modparam(\"uac\", \"reg_active\", 1)
 modparam(\"uac\", \"reg_timer_interval\", 60)
 modparam(\"uac\", \"reg_retry_interval\", 300)
@@ -806,6 +815,7 @@ main() {
   ensure_node_uuid_file
   ensure_api_token_file
   validate_pike_settings
+  validate_uac_default_socket
   run "install -d -m 0750 '/etc/mnscloud/softswitch/runtime'"
   run "chown root:root '/etc/mnscloud/softswitch/runtime'"
   ensure_uac_db_text
