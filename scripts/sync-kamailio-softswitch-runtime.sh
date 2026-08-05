@@ -10,6 +10,7 @@ UACREG_FILE="${UAC_DB_TEXT_DIR}/uacreg"
 UAC_RELOAD_STAMP_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_STAMP_FILE:-/etc/mnscloud/softswitch/runtime/uac-reg-reload.last}"
 UAC_RELOAD_LOCK_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_LOCK_FILE:-/run/mnscloud-softswitch-uac-reload.lock}"
 UAC_RELOAD_MIN_INTERVAL="${MNSCLOUD_KAMAILIO_UAC_RELOAD_MIN_INTERVAL:-155}"
+UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
 CURL_CONNECT_TIMEOUT="${MNSCLOUD_SOFTSWITCH_CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${MNSCLOUD_SOFTSWITCH_CURL_MAX_TIME:-30}"
 KAMCMD_TIMEOUT="${MNSCLOUD_SOFTSWITCH_KAMCMD_TIMEOUT:-10}"
@@ -28,6 +29,10 @@ dbtext_escape() {
 for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
   [[ -r "$required" ]] || { echo "missing required file: $required" >&2; exit 1; }
 done
+[[ "$UAC_DEFAULT_SOCKET" =~ ^(udp|tcp):[^[:space:]]+:[0-9]{1,5}$ ]] || {
+  echo "MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET must be udp|tcp:host:port." >&2
+  exit 1
+}
 for command in curl jq kamcmd timeout flock date; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
 kamcmd_call() {
   timeout --preserve-status "${KAMCMD_TIMEOUT}" kamcmd "$@"
@@ -194,6 +199,7 @@ while IFS= read -r item; do
   [[ -n "$realm" && "$realm" != "null" ]] || realm="$host"
   proxy="$(jq -r '.outboundProxy // empty' <<<"$item")"
   expires="$(jq -r '.registrationExpires // 3600' <<<"$item")"
+  socket="$UAC_DEFAULT_SOCKET"
   fingerprint="$(registration_fingerprint <<<"$item")"
   [[ "$id" != "null" && "$username" != "null" && "$password" != "null" && "$host" != "null" ]] || {
     echo "runtime registration payload contains required null values" >&2
@@ -204,13 +210,19 @@ while IFS= read -r item; do
     exit 1
   }
   case "$transport" in udp|tcp|tls) ;; *) echo "runtime registration payload contains invalid transport" >&2; exit 1 ;; esac
+  if [[ "$transport" == "tcp" && "$UAC_DEFAULT_SOCKET" == udp:* ]]; then
+    socket="${UAC_DEFAULT_SOCKET/udp:/tcp:}"
+  elif [[ "$transport" == "tls" ]]; then
+    echo "runtime registration payload requests tls transport, but this Kamailio softswitch runtime has no TLS UAC socket configured" >&2
+    exit 1
+  fi
   if [[ -z "$proxy" ]]; then
     proxy_scheme="sip"
     [[ "$transport" == "tls" ]] && proxy_scheme="sips"
     proxy="${proxy_scheme}:${host}:${port}"
   fi
   row_id=$((row_id + 1))
-  printf '%s:%s:%s:%s:%s:%s:%s:%s:%s::%s:%s:0:0::\n' \
+  printf '%s:%s:%s:%s:%s:%s:%s:%s:%s::%s:%s:0:0::%s\n' \
     "$row_id" \
     "$(dbtext_escape "$id")" \
     "$(dbtext_escape "$local_user")" \
@@ -221,7 +233,8 @@ while IFS= read -r item; do
     "$(dbtext_escape "$username")" \
     "$(dbtext_escape "$password")" \
     "$(dbtext_escape "$proxy")" \
-    "$expires" >> "$next_uacreg"
+    "$expires" \
+    "$(dbtext_escape "$socket")" >> "$next_uacreg"
   $first_registration || printf ',' >> "$next_state"
   first_registration=false
   jq -cn --arg registrationUUID "$id" --arg fingerprint "$fingerprint" '{registrationUUID:$registrationUUID, fingerprint:$fingerprint}' >> "$next_state"
