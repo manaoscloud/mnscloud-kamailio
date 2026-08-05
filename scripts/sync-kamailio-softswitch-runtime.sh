@@ -96,7 +96,7 @@ printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$re
 first_registration=true
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
-  add_output=""; refresh_output=""; register_output=""
+  add_output=""; refresh_output=""; register_output=""; proxy_scheme=""
   port="$(jq -r '.port // 5060' <<<"$item")"
   transport="$(jq -r '.transport // "udp" | ascii_downcase' <<<"$item")"
   local_user="$username"
@@ -119,7 +119,11 @@ while IFS= read -r item; do
   previous_fingerprint="$(jq -r --arg id "$id" '.registrations[]? | select(.registrationUUID == $id) | .fingerprint // empty' <<<"$state_payload")"
   if [[ "$fingerprint" != "$previous_fingerprint" ]] || ! registration_exists "$id"; then
     remove_registration "$id"
-    [[ -n "$proxy" ]] || proxy="sip:${host}:${port};transport=${transport}"
+    if [[ -z "$proxy" ]]; then
+      proxy_scheme="sip"
+      [[ "$transport" == "tls" ]] && proxy_scheme="sips"
+      proxy="${proxy_scheme}:${host}:${port}"
+    fi
     add_output="$(kamcmd uac.reg_add "$id" "$local_user" "$local_domain" "$username" "$host" "$realm" "$username" "$password" . "$proxy" "$expires" 0 0 . . 2>&1)" || {
       echo "uac.reg_add failed for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
       exit 1
