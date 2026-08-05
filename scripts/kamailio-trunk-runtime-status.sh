@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 [[ $# == 2 && "$1" == --input && -r "$2" && -f "$2" ]] || { echo 'Usage: kamailio-trunk-runtime-status.sh --input <json>' >&2; exit 64; }
 command -v jq >/dev/null && command -v kamcmd >/dev/null || { echo 'jq and kamcmd are required.' >&2; exit 69; }
+rpc_string() { printf 's:%s' "$1"; }
 input="$2"; count="$(jq -er '.trunks | if type == "array" then length else error("trunks") end' "$input")"
 (( count >= 1 && count <= 500 )) || { echo 'Trunk request must contain 1..500 trunks.' >&2; exit 65; }
 out="$(mktemp)"; trap 'rm -f "$out"' EXIT
@@ -14,7 +15,7 @@ while IFS= read -r trunk; do
     # The UAC RPC contract filters by attribute and value. The synchronizer uses
     # the UUID as l_uuid, so this gives an exact, bounded lookup.
     result=''; command_status=0
-    result="$(timeout 5 kamcmd uac.reg_info l_uuid "$uuid" 2>&1)" || command_status=$?
+    result="$(timeout 5 kamcmd uac.reg_info l_uuid "$(rpc_string "$uuid")" 2>&1)" || command_status=$?
     entry="$result"
     if [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered|record not found|(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)' <<<"$entry"; then
       status=not_registered; detail='Kamailio has no active trunk registration.'

@@ -7,6 +7,7 @@ API_TOKEN_FILE="${MNSCLOUD_SOFTSWITCH_API_TOKEN_FILE:-/etc/mnscloud/softswitch/a
 STATE_FILE="${MNSCLOUD_SOFTSWITCH_REGISTRATION_STATE_FILE:-/etc/mnscloud/softswitch/runtime/registrations.json}"
 
 read_value() { tr -d '[:space:]' < "$1"; }
+rpc_string() { printf 's:%s' "$1"; }
 for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
   [[ -r "$required" ]] || { echo "missing required file: $required" >&2; exit 1; }
 done
@@ -24,8 +25,8 @@ trap 'rm -f "$response"' EXIT
 
 remove_registration() {
   local id="$1"
-  kamcmd uac.reg_unregister l_uuid "$id" >/dev/null 2>&1 || true
-  kamcmd uac.reg_remove "$id" >/dev/null 2>&1 || true
+  kamcmd uac.reg_unregister l_uuid "$(rpc_string "$id")" >/dev/null 2>&1 || true
+  kamcmd uac.reg_remove "$(rpc_string "$id")" >/dev/null 2>&1 || true
 }
 
 registration_exists() {
@@ -33,7 +34,7 @@ registration_exists() {
   # The UAC RPC contract filters remote registrations by attribute and value.
   # Do not trust the local fingerprint cache when the running Kamailio process
   # has lost its in-memory registration table after a restart.
-  result="$(kamcmd uac.reg_info l_uuid "$id" 2>&1)" || command_status=$?
+  result="$(kamcmd uac.reg_info l_uuid "$(rpc_string "$id")" 2>&1)" || command_status=$?
   [[ "$command_status" == 0 && -n "$result" ]] || return 1
   ! grep -Eqi '(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)|record not found|not found|no such|does not exist' <<<"$result"
 }
@@ -124,7 +125,7 @@ while IFS= read -r item; do
       [[ "$transport" == "tls" ]] && proxy_scheme="sips"
       proxy="${proxy_scheme}:${host}:${port}"
     fi
-    add_output="$(kamcmd uac.reg_add "$id" "$local_user" "$local_domain" "$username" "$host" "$realm" "$username" "$password" . "$proxy" "$expires" 0 0 . . 2>&1)" || {
+    add_output="$(kamcmd uac.reg_add "$(rpc_string "$id")" "$(rpc_string "$local_user")" "$(rpc_string "$local_domain")" "$(rpc_string "$username")" "$(rpc_string "$host")" "$(rpc_string "$realm")" "$(rpc_string "$username")" "$(rpc_string "$password")" . "$(rpc_string "$proxy")" "$expires" 0 0 . . 2>&1)" || {
       echo "uac.reg_add failed for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
       exit 1
     }
@@ -132,7 +133,7 @@ while IFS= read -r item; do
       echo "uac.reg_add returned an error for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
       exit 1
     fi
-    refresh_output="$(kamcmd uac.reg_refresh "$id" 2>&1)" || {
+    refresh_output="$(kamcmd uac.reg_refresh "$(rpc_string "$id")" 2>&1)" || {
       echo "uac.reg_refresh failed for registration ${id}: $(sanitize_rpc_output <<<"$refresh_output")" >&2
       exit 1
     }
@@ -140,7 +141,7 @@ while IFS= read -r item; do
       echo "uac.reg_refresh returned an error for registration ${id}: $(sanitize_rpc_output <<<"$refresh_output")" >&2
       exit 1
     fi
-    register_output="$(kamcmd uac.reg_register l_uuid "$id" 2>&1)" || {
+    register_output="$(kamcmd uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
       echo "uac.reg_register failed for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
       exit 1
     }
