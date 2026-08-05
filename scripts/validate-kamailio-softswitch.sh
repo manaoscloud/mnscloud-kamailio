@@ -43,6 +43,9 @@ grep -Fq 'l_uuid(str)' "$installer"
 grep -Fq 'recent kamailio log:' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'UAC_RELOAD_MIN_INTERVAL' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'flock -x' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'registration_is_active_or_in_progress' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'flag_value & 14' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'only initialized; it is not enough to skip reg_register' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'failed to shift records' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'temporarily deferred' scripts/sync-kamailio-softswitch-runtime.sh
 ! grep -Fq 'sleep "$UAC_RELOAD_MIN_INTERVAL"' scripts/sync-kamailio-softswitch-runtime.sh
