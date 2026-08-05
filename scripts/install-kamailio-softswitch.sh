@@ -11,6 +11,7 @@ NODE_UUID_FILE="/etc/mnscloud/softswitch/node.uuid"
 API_TOKEN_FILE="/etc/mnscloud/softswitch/api.token"
 API_BASE_FILE="/etc/mnscloud/softswitch/api.base"
 MEDIA_SOCKET_FILE="/etc/mnscloud/softswitch/media.socket"
+UAC_DB_TEXT_DIR="/etc/mnscloud/softswitch/kamailio-db"
 DEFAULT_API_BASE="${MNSCLOUD_API_BASE:-https://api.example.com}"
 SOFTSWITCH_ENGINE="${SOFTSWITCH_ENGINE:-kamailio}"
 NODE_UUID="${MNSCLOUD_SOFTSWITCH_NODE_UUID:-}"
@@ -58,6 +59,32 @@ validate_pike_settings() {
       return 1
     }
   done
+}
+
+ensure_uac_db_text() {
+  local version_file="${UAC_DB_TEXT_DIR}/version"
+  local uacreg_file="${UAC_DB_TEXT_DIR}/uacreg"
+  if [[ "$DRY_RUN" == true ]]; then
+    log DRY "install -d -m 0750 '${UAC_DB_TEXT_DIR}'"
+    log DRY "install UAC db_text schema files in '${UAC_DB_TEXT_DIR}'"
+    return 0
+  fi
+
+  install -d -m 0750 -o root -g root "${UAC_DB_TEXT_DIR}"
+  if [[ ! -f "${uacreg_file}" ]]; then
+    cat >"${uacreg_file}" <<'EOF_UACREG'
+id(int,auto) l_uuid(string) l_username(string) l_domain(string) r_username(string) r_domain(string) realm(string) auth_username(string) auth_password(string) auth_ha1(string) auth_proxy(string) expires(int) flags(int) reg_delay(int) contact_addr(string) socket(string)
+EOF_UACREG
+  fi
+  if [[ ! -f "${version_file}" ]]; then
+    cat >"${version_file}" <<'EOF_VERSION'
+0:uacreg:5
+EOF_VERSION
+  elif ! grep -Eq '^[0-9]+:uacreg:5$' "${version_file}"; then
+    printf '%s\n' '0:uacreg:5' >>"${version_file}"
+  fi
+  chown root:root "${uacreg_file}" "${version_file}"
+  chmod 0640 "${uacreg_file}" "${version_file}"
 }
 
 prompt_api_base() {
@@ -414,6 +441,7 @@ loadmodule \"jsonrpcs.so\"
 loadmodule \"kex.so\"
 loadmodule \"corex.so\"
 loadmodule \"ctl.so\"
+loadmodule \"db_text.so\"
 loadmodule \"http_client.so\"
 loadmodule \"jansson.so\"
 loadmodule \"uac.so\"
@@ -427,6 +455,7 @@ modparam(\"http_client\", \"query_result\", 0)
 modparam(\"pike\", \"sampling_time_unit\", ${KAMAILIO_PIKE_SAMPLING_TIME_UNIT})
 modparam(\"pike\", \"reqs_density_per_unit\", ${KAMAILIO_PIKE_REQUEST_DENSITY})
 modparam(\"pike\", \"remove_latency\", ${KAMAILIO_PIKE_REMOVE_LATENCY})
+modparam(\"uac\", \"reg_db_url\", \"db_text://${UAC_DB_TEXT_DIR}\")
 modparam(\"uac\", \"reg_timer_interval\", 60)
 modparam(\"uac\", \"reg_retry_interval\", 300)
 ${rtpengine_params}
@@ -725,6 +754,7 @@ main() {
   validate_pike_settings
   run "install -d -m 0750 '/etc/mnscloud/softswitch/runtime'"
   run "chown root:root '/etc/mnscloud/softswitch/runtime'"
+  ensure_uac_db_text
   case "$(detect_kamailio_os)" in
     debian) install_packages_debian ;;
     rocky) install_packages_rocky ;;
