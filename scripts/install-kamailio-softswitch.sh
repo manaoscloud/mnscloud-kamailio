@@ -549,7 +549,7 @@ route[AUTH_LOOKUP] {
     return(-2);
   }
 
-  if (\$var(auth_authorized) != \"true\" && \$var(auth_authorized) != \"1\") {
+  if (!(\$var(auth_authorized) =~ \"^(true|1)$\")) {
     xlog(\"L_WARN\", \"MNSCloud SIP edge denied engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) reason=authorization\\n\");
     return(-2);
   }

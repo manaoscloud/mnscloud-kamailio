@@ -7,6 +7,9 @@ API_TOKEN_FILE="${MNSCLOUD_SOFTSWITCH_API_TOKEN_FILE:-/etc/mnscloud/softswitch/a
 STATE_FILE="${MNSCLOUD_SOFTSWITCH_REGISTRATION_STATE_FILE:-/etc/mnscloud/softswitch/runtime/registrations.json}"
 UAC_DB_TEXT_DIR="${MNSCLOUD_KAMAILIO_UAC_DB_TEXT_DIR:-/etc/mnscloud/softswitch/kamailio-db}"
 UACREG_FILE="${UAC_DB_TEXT_DIR}/uacreg"
+UAC_RELOAD_STAMP_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_STAMP_FILE:-/etc/mnscloud/softswitch/runtime/uac-reg-reload.last}"
+UAC_RELOAD_LOCK_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_LOCK_FILE:-/run/mnscloud-softswitch-uac-reload.lock}"
+UAC_RELOAD_MIN_INTERVAL="${MNSCLOUD_KAMAILIO_UAC_RELOAD_MIN_INTERVAL:-155}"
 CURL_CONNECT_TIMEOUT="${MNSCLOUD_SOFTSWITCH_CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${MNSCLOUD_SOFTSWITCH_CURL_MAX_TIME:-30}"
 KAMCMD_TIMEOUT="${MNSCLOUD_SOFTSWITCH_KAMCMD_TIMEOUT:-10}"
@@ -25,7 +28,7 @@ dbtext_escape() {
 for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
   [[ -r "$required" ]] || { echo "missing required file: $required" >&2; exit 1; }
 done
-for command in curl jq kamcmd timeout; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
+for command in curl jq kamcmd timeout flock date; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
 kamcmd_call() {
   timeout --preserve-status "${KAMCMD_TIMEOUT}" kamcmd "$@"
 }
@@ -73,6 +76,75 @@ recent_kamailio_log() {
 
 rpc_output_has_error() {
   grep -Eqi '(^|[[:space:]])error:|invalid|failed|not found|no such|does not exist'
+}
+
+reload_output_is_shift_throttle() {
+  grep -Eqi 'failed to shift records|shifting the memory table is not possible'
+}
+
+wait_for_reload_window() {
+  local now last elapsed wait_seconds
+  now="$(date +%s)"
+  last=0
+  [[ -r "$UAC_RELOAD_STAMP_FILE" ]] && last="$(tr -cd '0-9' < "$UAC_RELOAD_STAMP_FILE" || true)"
+  [[ "$last" =~ ^[0-9]+$ ]] || last=0
+  elapsed=$((now - last))
+  if (( last > 0 && elapsed >= 0 && elapsed < UAC_RELOAD_MIN_INTERVAL )); then
+    wait_seconds=$((UAC_RELOAD_MIN_INTERVAL - elapsed))
+    echo "[sync-kamailio-softswitch-runtime] waiting ${wait_seconds}s before UAC reload to respect Kamailio reload window"
+    sleep "$wait_seconds"
+  fi
+}
+
+mark_reload_attempt() {
+  install -d -m 0750 -o root -g root "$(dirname "$UAC_RELOAD_STAMP_FILE")"
+  date +%s > "$UAC_RELOAD_STAMP_FILE"
+  chown root:root "$UAC_RELOAD_STAMP_FILE"
+  chmod 0640 "$UAC_RELOAD_STAMP_FILE"
+}
+
+reload_uac_registrations() {
+  local reload_output recent_log retry_output
+  wait_for_reload_window
+  mark_reload_attempt
+  reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
+    if reload_output_is_shift_throttle <<<"$reload_output"; then
+      echo "[sync-kamailio-softswitch-runtime] Kamailio rejected UAC reload because the memory table was shifted recently; retrying after ${UAC_RELOAD_MIN_INTERVAL}s"
+      sleep "$UAC_RELOAD_MIN_INTERVAL"
+      mark_reload_attempt
+      retry_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
+        echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$retry_output")" >&2
+        recent_log="$(recent_kamailio_log)"
+        [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
+        return 1
+      }
+      reload_output="$retry_output"
+    else
+      echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
+      recent_log="$(recent_kamailio_log)"
+      [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
+      return 1
+    fi
+  }
+  if rpc_output_has_error <<<"$reload_output"; then
+    if reload_output_is_shift_throttle <<<"$reload_output"; then
+      echo "[sync-kamailio-softswitch-runtime] Kamailio rejected UAC reload because the memory table was shifted recently; retrying after ${UAC_RELOAD_MIN_INTERVAL}s"
+      sleep "$UAC_RELOAD_MIN_INTERVAL"
+      mark_reload_attempt
+      reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
+        echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
+        recent_log="$(recent_kamailio_log)"
+        [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
+        return 1
+      }
+    fi
+  fi
+  if rpc_output_has_error <<<"$reload_output"; then
+    echo "uac.reg_reload returned an error: $(sanitize_rpc_output <<<"$reload_output")" >&2
+    recent_log="$(recent_kamailio_log)"
+    [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
+    return 1
+  fi
 }
 
 fetch_registrations() {
@@ -168,18 +240,11 @@ done < <(jq -c '.data.registrations[]' "$response")
 printf ']}' >> "$next_state"
 install -d -m 0750 -o root -g root "$UAC_DB_TEXT_DIR"
 install -m 0640 -o root -g root "$next_uacreg" "$UACREG_FILE"
-reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
-  echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
-  recent_log="$(recent_kamailio_log)"
-  [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
-  exit 1
-}
-if rpc_output_has_error <<<"$reload_output"; then
-  echo "uac.reg_reload returned an error: $(sanitize_rpc_output <<<"$reload_output")" >&2
-  recent_log="$(recent_kamailio_log)"
-  [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
-  exit 1
-fi
+install -d -m 0750 -o root -g root "$(dirname "$UAC_RELOAD_LOCK_FILE")"
+(
+  flock -x 9
+  reload_uac_registrations
+) 9>"$UAC_RELOAD_LOCK_FILE"
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
   register_output="$(kamcmd_call uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
