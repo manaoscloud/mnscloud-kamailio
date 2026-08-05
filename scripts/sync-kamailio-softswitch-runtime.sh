@@ -87,8 +87,24 @@ sanitize_runtime_log() {
 }
 
 recent_kamailio_log() {
-  command -v journalctl >/dev/null || return 0
-  journalctl -u kamailio --no-pager -n 80 2>/dev/null | sanitize_runtime_log || true
+  local printed=false
+  if [[ -r /var/log/mnscloud/kamailio/kamailio.err.log ]]; then
+    echo "managed stderr: $(tail -n 80 /var/log/mnscloud/kamailio/kamailio.err.log 2>/dev/null | sanitize_runtime_log || true)"
+    printed=true
+  fi
+  if [[ -r /var/log/mnscloud/kamailio/kamailio.out.log ]]; then
+    echo "managed stdout: $(tail -n 40 /var/log/mnscloud/kamailio/kamailio.out.log 2>/dev/null | sanitize_runtime_log || true)"
+    printed=true
+  fi
+  if [[ "$printed" == false ]] && command -v journalctl >/dev/null; then
+    journalctl -u kamailio --no-pager -n 80 2>/dev/null | sanitize_runtime_log || true
+  fi
+}
+
+registration_diagnostic() {
+  local id="$1" info="" command_status=0
+  info="$(kamcmd_call uac.reg_info l_uuid "$(rpc_string "$id")" 2>&1)" || command_status=$?
+  printf 'uac.reg_info(status=%s): %s' "$command_status" "$(sanitize_rpc_output <<<"$info")"
 }
 
 rpc_output_has_error() {
@@ -270,7 +286,7 @@ while IFS= read -r id; do
     exit 1
   fi
   registration_is_active_or_in_progress "$id" || {
-    echo "uac registration ${id} was not active or in progress after db_text reload/register." >&2
+    echo "uac registration ${id} was not active or in progress after db_text reload/register. $(registration_diagnostic "$id"). recent kamailio log: $(recent_kamailio_log)" >&2
     exit 1
   }
 done < <(jq -r '.registrations[]?.registrationUUID // empty' "$next_state")
