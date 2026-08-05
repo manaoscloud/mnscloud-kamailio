@@ -847,10 +847,22 @@ enable_service() {
     run "journalctl -u kamailio --no-pager -l -n 160 || true"
     return 1
   fi
-  run "systemctl is-active kamailio"
+  if ! run "systemctl is-active kamailio"; then
+    run "tail -n 160 '${KAMAILIO_LOG_DIR}/kamailio.err.log' || true"
+    run "tail -n 80 '${KAMAILIO_LOG_DIR}/kamailio.out.log' || true"
+    return 1
+  fi
   run "sleep 2"
-  run "systemctl is-active kamailio"
-  run "kamcmd system.listMethods >/dev/null"
+  if ! run "systemctl is-active kamailio"; then
+    run "tail -n 160 '${KAMAILIO_LOG_DIR}/kamailio.err.log' || true"
+    run "tail -n 80 '${KAMAILIO_LOG_DIR}/kamailio.out.log' || true"
+    return 1
+  fi
+  if ! run "kamcmd system.listMethods >/dev/null"; then
+    run "tail -n 160 '${KAMAILIO_LOG_DIR}/kamailio.err.log' || true"
+    run "tail -n 80 '${KAMAILIO_LOG_DIR}/kamailio.out.log' || true"
+    return 1
+  fi
 }
 
 main() {
