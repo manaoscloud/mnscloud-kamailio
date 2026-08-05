@@ -17,7 +17,6 @@ dbtext_escape() {
   value="${value//$'\r'/\\r}"
   value="${value//$'\t'/\\t}"
   value="${value//:/\\:}"
-  value="${value//0/\\0}"
   printf '%s' "$value"
 }
 for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
