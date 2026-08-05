@@ -436,6 +436,7 @@ backup_once() {
 write_kamailio_config() {
   local cfg="/etc/kamailio/kamailio.cfg"
   local rtpengine_modules="" rtpengine_params="" rtpengine_offer="" rtpengine_delete=""
+  local cfg_group="${KAMAILIO_RUNTIME_GROUP}"
   rtpengine_offer='
 route[MEDIA_OFFER] {
   return(1);
@@ -795,15 +796,22 @@ ${rtpengine_delete}
   exit;
 }
 "
+  if ! getent group "${cfg_group}" >/dev/null 2>&1; then
+    cfg_group="root"
+  fi
+  run "chown root:'${cfg_group}' '${cfg}'"
+  run "chmod 0640 '${cfg}'"
   run "kamailio -c -f '${cfg}'"
 }
 
 enable_service() {
   run "systemctl enable kamailio"
   stop_existing_kamailio
+  run "systemctl reset-failed kamailio 2>/dev/null || true"
   if ! run "systemctl start kamailio"; then
     run "systemctl status kamailio --no-pager -l || true"
-    run "journalctl -u kamailio --no-pager -n 120 || true"
+    run "journalctl -xeu kamailio --no-pager -n 160 || true"
+    run "journalctl -u kamailio --no-pager -l -n 160 || true"
     return 1
   fi
   run "systemctl is-active kamailio"
