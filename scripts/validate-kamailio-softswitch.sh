@@ -22,6 +22,7 @@ grep -Fq 'modparam(\"uac\", \"reg_db_url\", \"text://' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_contact_addr\", \"' "$installer"
 grep -Fq 'modparam(\"uac\", \"default_socket\", \"' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_active\", 1)' "$installer"
+grep -Fq 'KAMAILIO_RUNTIME_USER' "$installer"
 grep -Fq 'id(int,auto) table_name(str) table_version(int)' "$installer"
 grep -Fq '1:uacreg:5' "$installer"
 grep -Fq 'l_uuid(str)' "$installer"
@@ -33,6 +34,7 @@ grep -Fq 'temporarily deferred' scripts/sync-kamailio-softswitch-runtime.sh
 ! grep -Fq 'sleep "$UAC_RELOAD_MIN_INTERVAL"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'if (!(\$var(auth_authorized) =~ \"^(true|1)$\"))' "$installer"
 grep -Fq 'UAC_DEFAULT_SOCKET' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'KAMAILIO_RUNTIME_USER' scripts/sync-kamailio-softswitch-runtime.sh
 
 validate_http_client_calls() {
   local target="$1" scope="$2" query_calls request_calls
