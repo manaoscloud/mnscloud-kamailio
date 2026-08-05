@@ -25,6 +25,10 @@ grep -Fq 'id(int,auto) table_name(str) table_version(int)' "$installer"
 grep -Fq '1:uacreg:5' "$installer"
 grep -Fq 'l_uuid(str)' "$installer"
 grep -Fq 'recent kamailio log:' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'UAC_RELOAD_MIN_INTERVAL' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'flock -x' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'failed to shift records' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'if (!(\$var(auth_authorized) =~ \"^(true|1)$\"))' "$installer"
 
 validate_http_client_calls() {
   local target="$1" scope="$2" query_calls request_calls
