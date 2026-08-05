@@ -54,6 +54,17 @@ sanitize_rpc_output() {
   tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300
 }
 
+sanitize_runtime_log() {
+  sed -E 's/(auth_password|password|authorization|credential)([^[:space:]]*)/[redacted]/Ig' \
+    | sed -E 's/[[:space:]]+/ /g' \
+    | cut -c1-2000
+}
+
+recent_kamailio_log() {
+  command -v journalctl >/dev/null || return 0
+  journalctl -u kamailio --no-pager -n 80 2>/dev/null | sanitize_runtime_log || true
+}
+
 rpc_output_has_error() {
   grep -Eqi '(^|[[:space:]])error:|invalid|failed|not found|no such|does not exist'
 }
@@ -101,7 +112,7 @@ next_state="$(mktemp)"
 next_uacreg="$(mktemp)"
 trap 'rm -f "$response" "$next_state" "$next_uacreg"' EXIT
 printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$response")" > "$next_state"
-printf '%s\n' 'id(int,auto) l_uuid(string) l_username(string) l_domain(string) r_username(string) r_domain(string) realm(string) auth_username(string) auth_password(string) auth_ha1(string) auth_proxy(string) expires(int) flags(int) reg_delay(int) contact_addr(string) socket(string)' > "$next_uacreg"
+printf '%s\n' 'id(int,auto) l_uuid(str) l_username(str) l_domain(str) r_username(str) r_domain(str) realm(str) auth_username(str) auth_password(str) auth_ha1(str,null) auth_proxy(str) expires(int) flags(int) reg_delay(int) contact_addr(str,null) socket(str,null)' > "$next_uacreg"
 first_registration=true
 row_id=0
 while IFS= read -r item; do
@@ -153,10 +164,14 @@ install -d -m 0750 -o root -g root "$UAC_DB_TEXT_DIR"
 install -m 0640 -o root -g root "$next_uacreg" "$UACREG_FILE"
 reload_output="$(kamcmd uac.reg_reload 2>&1)" || {
   echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
+  recent_log="$(recent_kamailio_log)"
+  [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
   exit 1
 }
 if rpc_output_has_error <<<"$reload_output"; then
   echo "uac.reg_reload returned an error: $(sanitize_rpc_output <<<"$reload_output")" >&2
+  recent_log="$(recent_kamailio_log)"
+  [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
   exit 1
 fi
 while IFS= read -r id; do
