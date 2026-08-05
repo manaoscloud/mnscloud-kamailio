@@ -128,7 +128,11 @@ Troncos com autenticação `register` são registros UAC de saída para operador
 configuração canônica; o Agent do servidor recebe o job `voip.softswitch.runtime` e executa
 `scripts/sync-kamailio-softswitch-runtime.sh`. O script consulta `/runtime/registrations`, aplica
 somente o delta pelo módulo UAC do Kamailio e remove explicitamente registros que deixaram de
-existir no controle de plano. Não há polling periódico ou fallback local para essa configuração.
+existir no controle de plano. Para habilitar oficialmente os RPCs `uac.reg_*`, o Kamailio exige
+`reg_db_url`; o instalador usa `db_text` local em `/etc/mnscloud/softswitch/kamailio-db`. Esse é um
+estado interno do Kamailio para remote registration, não conexão ao banco central MNSCloud. A origem
+dos trunks, senhas, autorização, tenant e roteamento continua sendo a API/control-plane. Não há
+polling periódico ou fallback local para essa configuração.
 
 Troncos `ip_acl` não executam REGISTER: eles são identificados exclusivamente pelos IPs/CIDRs
 autorizados durante a decisão inbound da API.

@@ -17,6 +17,9 @@ installer="$(dirname "$0")/install-kamailio-softswitch.sh"
 echo "[validate-kamailio-softswitch] checking Kamailio HTTP runtime template"
 grep -Fq 'loadmodule \"pike.so\"' "$installer"
 grep -Fq 'pike_check_req()' "$installer"
+grep -Fq 'loadmodule \"db_text.so\"' "$installer"
+grep -Fq 'modparam(\"uac\", \"reg_db_url\", \"db_text://' "$installer"
+grep -Fq 'uacreg:5' "$installer"
 
 validate_http_client_calls() {
   local target="$1" scope="$2" query_calls request_calls
@@ -63,6 +66,14 @@ if is_managed_runtime_config "$KAMAILIO_CFG"; then
   }
   grep -Fq 'pike_check_req()' "$KAMAILIO_CFG" || {
     echo "[validate-kamailio-softswitch] deployed config is missing pike request protection" >&2
+    exit 1
+  }
+  grep -Fq 'loadmodule "db_text.so"' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing db_text.so for UAC remote registrations" >&2
+    exit 1
+  }
+  grep -Fq 'modparam("uac", "reg_db_url", "db_text://' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing UAC reg_db_url db_text backend" >&2
     exit 1
   }
   validate_http_client_calls "$KAMAILIO_CFG" "deployed config"

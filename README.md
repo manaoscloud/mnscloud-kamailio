@@ -35,6 +35,7 @@ contract. It can run on MNSCloud, customer, or partner infrastructure.
 - Node UUID: `/etc/mnscloud/softswitch/node.uuid`
 - API token: `/etc/mnscloud/softswitch/api.token`
 - API base URL: `/etc/mnscloud/softswitch/api.base`
+- Local Kamailio UAC db_text state: `/etc/mnscloud/softswitch/kamailio-db`
 - Kamailio config: `/etc/kamailio/kamailio.cfg`
 - Config validation: `kamailio -c -f /etc/kamailio/kamailio.cfg`
 - Runtime API: `/api/v1/softswitch/runtime/*`
@@ -51,13 +52,27 @@ Subscriber registration status is collected only by the enrolled `mnscloud-agent
 typed, tenant-scoped diagnostic for one subscriber or all subscribers in an account; the Agent invokes
 `scripts/kamailio-subscriber-runtime-status.sh`, which performs bounded read-only `kamcmd ul.lookup`
 queries. Trunk diagnostics use `scripts/kamailio-trunk-runtime-status.sh`; it accepts only bounded,
-validated Agent input and invokes the fixed local `kamcmd uac.reg_info l_uuid <trunk-uuid>` query. OpenSIPS trunk status
-is intentionally unsupported and fails closed in the Agent.
-queries. The browser never receives a shell command, Agent token, or subscriber password.
+validated Agent input and invokes the fixed local `kamcmd uac.reg_info l_uuid <trunk-uuid>` query.
+OpenSIPS trunk status is intentionally unsupported and fails closed in the Agent. The browser never
+receives a shell command, Agent token, or subscriber password.
 
 The API/control plane must be deployed with the canonical softswitch runtime contract before this
 connector is installed or updated. This connector does not call engine-specific legacy runtime
 endpoints.
+
+## Trunk remote registrations
+
+Register-authenticated trunks are outbound UAC registrations to upstream operators. The API remains
+the canonical source of trunk configuration, credentials, authorization, tenant scope, and routing.
+The enrolled Agent receives a typed `voip.softswitch.runtime` job and runs
+`scripts/sync-kamailio-softswitch-runtime.sh`, which fetches `/runtime/registrations` and applies
+only the current delta to Kamailio.
+
+Kamailio's official UAC remote-registration feature requires `reg_db_url` before it exposes the
+`uac.reg_*` RPC commands. The installer therefore creates a minimal local `db_text` backend at
+`/etc/mnscloud/softswitch/kamailio-db`. This is local Kamailio runtime state only; it is not the
+MNSCloud central database, does not authorize tenants, does not resolve secrets, and does not bypass
+the API/control plane.
 
 ## Requirements
 
