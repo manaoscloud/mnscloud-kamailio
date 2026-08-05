@@ -77,11 +77,13 @@ registration_fingerprint() {
 }
 
 sanitize_rpc_output() {
-  tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300
+  tr '\n' ' ' |
+    sed -E 's/[[:space:]]+/ /g; s/(auth_password|password|authorization|credential)[[:space:]]*:[[:space:]]*[^[:space:]}]+/\1: [redacted]/Ig; s/(auth_password|password|authorization|credential)[^[:space:]}]*/\1: [redacted]/Ig' |
+    cut -c1-300
 }
 
 sanitize_runtime_log() {
-  sed -E 's/(auth_password|password|authorization|credential)([^[:space:]]*)/[redacted]/Ig' \
+  sed -E 's/(auth_password|password|authorization|credential)[[:space:]]*:[[:space:]]*[^[:space:]}]+/\1: [redacted]/Ig; s/(auth_password|password|authorization|credential)([^[:space:]]*)/\1: [redacted]/Ig' \
     | sed -E 's/[[:space:]]+/ /g' \
     | cut -c1-2000
 }
