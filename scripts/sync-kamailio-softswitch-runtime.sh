@@ -21,17 +21,6 @@ state_payload='{"registrations":[]}'
 previous_revision="$(jq -r '.revision // empty' <<<"$state_payload")"
 response="$(mktemp)"
 trap 'rm -f "$response"' EXIT
-request_headers=(-H "Authorization: Bearer ${api_token}" -H 'X-Softswitch-Engine: kamailio' -H 'Content-Type: application/json')
-[[ -n "$previous_revision" ]] && request_headers+=(-H "If-None-Match: \"${previous_revision}\"")
-http_code="$(curl -sS -o "$response" -w '%{http_code}' -X POST "${api_base%/}/api/v1/softswitch/runtime/registrations?node_uuid=${node_uuid}&engine=kamailio" "${request_headers[@]}" --data '{"engine":"kamailio"}')"
-[[ "$http_code" == 304 ]] && { echo '[sync-kamailio-softswitch-runtime] registration snapshot unchanged'; exit 0; }
-[[ "$http_code" =~ ^2 ]] || { echo "runtime registration fetch failed: HTTP ${http_code}" >&2; exit 1; }
-jq -e '.status == "success" and (.data.registrations | type == "array")' "$response" >/dev/null
-
-registration_fingerprint() {
-  jq -cS '{registrationUUID, host, port, transport, outboundProxy, username, password, realm, fromDomain, registrationExpires}' \
-    | sha256sum | awk '{print $1}'
-}
 
 remove_registration() {
   local id="$1"
@@ -48,6 +37,38 @@ registration_exists() {
   [[ "$command_status" == 0 && -n "$result" ]] || return 1
   ! grep -Eqi '(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)|record not found|not found|no such|does not exist' <<<"$result"
 }
+
+registration_fingerprint() {
+  jq -cS '{registrationUUID, host, port, transport, outboundProxy, username, password, realm, fromDomain, registrationExpires}' \
+    | sha256sum | awk '{print $1}'
+}
+
+fetch_registrations() {
+  local use_revision="${1:-true}" http_code
+  local request_headers=(-H "Authorization: Bearer ${api_token}" -H 'X-Softswitch-Engine: kamailio' -H 'Content-Type: application/json')
+  [[ "$use_revision" == true && -n "$previous_revision" ]] && request_headers+=(-H "If-None-Match: \"${previous_revision}\"")
+  http_code="$(curl -sS -o "$response" -w '%{http_code}' -X POST "${api_base%/}/api/v1/softswitch/runtime/registrations?node_uuid=${node_uuid}&engine=kamailio" "${request_headers[@]}" --data '{"engine":"kamailio"}')"
+  printf "%s" "$http_code"
+}
+
+http_code="$(fetch_registrations true)"
+if [[ "$http_code" == 304 ]]; then
+  missing_runtime_registration=false
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    if ! registration_exists "$id"; then
+      missing_runtime_registration=true
+      break
+    fi
+  done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload")
+  if [[ "$missing_runtime_registration" == false ]]; then
+    echo '[sync-kamailio-softswitch-runtime] registration snapshot unchanged'
+    exit 0
+  fi
+  http_code="$(fetch_registrations false)"
+fi
+[[ "$http_code" =~ ^2 ]] || { echo "runtime registration fetch failed: HTTP ${http_code}" >&2; exit 1; }
+jq -e '.status == "success" and (.data.registrations | type == "array")' "$response" >/dev/null
 
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
