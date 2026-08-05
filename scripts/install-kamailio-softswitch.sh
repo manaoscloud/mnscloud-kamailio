@@ -12,6 +12,7 @@ API_TOKEN_FILE="/etc/mnscloud/softswitch/api.token"
 API_BASE_FILE="/etc/mnscloud/softswitch/api.base"
 MEDIA_SOCKET_FILE="/etc/mnscloud/softswitch/media.socket"
 UAC_DB_TEXT_DIR="/etc/mnscloud/softswitch/kamailio-db"
+KAMAILIO_LOG_DIR="/var/log/mnscloud/kamailio"
 DEFAULT_API_BASE="${MNSCLOUD_API_BASE:-https://api.example.com}"
 SOFTSWITCH_ENGINE="${SOFTSWITCH_ENGINE:-kamailio}"
 NODE_UUID="${MNSCLOUD_SOFTSWITCH_NODE_UUID:-}"
@@ -812,13 +813,14 @@ install_systemd_override() {
     return 0
   fi
   install -d -m 0755 "${override_dir}"
+  install -d -m 0750 -o root -g "${KAMAILIO_RUNTIME_GROUP}" "${KAMAILIO_LOG_DIR}"
   cat >"${override_file}" <<'EOF_SYSTEMD_OVERRIDE'
 [Service]
 Type=simple
 ExecStart=
 ExecStart=/usr/sbin/kamailio -DD -E -P /run/kamailio/kamailio.pid -f $CFGFILE -m $SHM_MEMORY -M $PKG_MEMORY --atexit=no
-StandardOutput=null
-StandardError=journal
+StandardOutput=append:/var/log/mnscloud/kamailio/kamailio.out.log
+StandardError=append:/var/log/mnscloud/kamailio/kamailio.err.log
 EOF_SYSTEMD_OVERRIDE
   chown root:root "${override_file}"
   chmod 0644 "${override_file}"
@@ -846,6 +848,9 @@ enable_service() {
     return 1
   fi
   run "systemctl is-active kamailio"
+  run "sleep 2"
+  run "systemctl is-active kamailio"
+  run "kamcmd system.listMethods >/dev/null"
 }
 
 main() {
