@@ -818,7 +818,9 @@ install_systemd_override() {
 [Service]
 Type=simple
 ExecStart=
-ExecStart=/usr/sbin/kamailio -DD -E -P /run/kamailio/kamailio.pid -f $CFGFILE -m $SHM_MEMORY -M $PKG_MEMORY --atexit=no
+User=root
+Group=root
+ExecStart=/usr/sbin/kamailio -DD -E -u kamailio -g kamailio -Y /run/kamailio -P /run/kamailio/kamailio.pid -f $CFGFILE -m $SHM_MEMORY -M $PKG_MEMORY --atexit=no
 StandardOutput=append:/var/log/mnscloud/kamailio/kamailio.out.log
 StandardError=append:/var/log/mnscloud/kamailio/kamailio.err.log
 EOF_SYSTEMD_OVERRIDE
