@@ -28,6 +28,8 @@ grep -Fq 'recent kamailio log:' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'UAC_RELOAD_MIN_INTERVAL' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'flock -x' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'failed to shift records' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'temporarily deferred' scripts/sync-kamailio-softswitch-runtime.sh
+! grep -Fq 'sleep "$UAC_RELOAD_MIN_INTERVAL"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'if (!(\$var(auth_authorized) =~ \"^(true|1)$\"))' "$installer"
 
 validate_http_client_calls() {

@@ -82,18 +82,18 @@ reload_output_is_shift_throttle() {
   grep -Eqi 'failed to shift records|shifting the memory table is not possible'
 }
 
-wait_for_reload_window() {
-  local now last elapsed wait_seconds
+reload_window_remaining_seconds() {
+  local now last elapsed
   now="$(date +%s)"
   last=0
   [[ -r "$UAC_RELOAD_STAMP_FILE" ]] && last="$(tr -cd '0-9' < "$UAC_RELOAD_STAMP_FILE" || true)"
   [[ "$last" =~ ^[0-9]+$ ]] || last=0
   elapsed=$((now - last))
   if (( last > 0 && elapsed >= 0 && elapsed < UAC_RELOAD_MIN_INTERVAL )); then
-    wait_seconds=$((UAC_RELOAD_MIN_INTERVAL - elapsed))
-    echo "[sync-kamailio-softswitch-runtime] waiting ${wait_seconds}s before UAC reload to respect Kamailio reload window"
-    sleep "$wait_seconds"
+    printf '%s' "$((UAC_RELOAD_MIN_INTERVAL - elapsed))"
+    return 0
   fi
+  printf '0'
 }
 
 mark_reload_attempt() {
@@ -104,21 +104,17 @@ mark_reload_attempt() {
 }
 
 reload_uac_registrations() {
-  local reload_output recent_log retry_output
-  wait_for_reload_window
+  local reload_output recent_log retry_after
+  retry_after="$(reload_window_remaining_seconds)"
+  if (( retry_after > 0 )); then
+    echo "uac.reg_reload temporarily deferred: Kamailio UAC reload window is still active; retry after ${retry_after}s." >&2
+    return 75
+  fi
   mark_reload_attempt
   reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
     if reload_output_is_shift_throttle <<<"$reload_output"; then
-      echo "[sync-kamailio-softswitch-runtime] Kamailio rejected UAC reload because the memory table was shifted recently; retrying after ${UAC_RELOAD_MIN_INTERVAL}s"
-      sleep "$UAC_RELOAD_MIN_INTERVAL"
-      mark_reload_attempt
-      retry_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
-        echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$retry_output")" >&2
-        recent_log="$(recent_kamailio_log)"
-        [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
-        return 1
-      }
-      reload_output="$retry_output"
+      echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
+      return 75
     else
       echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
       recent_log="$(recent_kamailio_log)"
@@ -128,15 +124,8 @@ reload_uac_registrations() {
   }
   if rpc_output_has_error <<<"$reload_output"; then
     if reload_output_is_shift_throttle <<<"$reload_output"; then
-      echo "[sync-kamailio-softswitch-runtime] Kamailio rejected UAC reload because the memory table was shifted recently; retrying after ${UAC_RELOAD_MIN_INTERVAL}s"
-      sleep "$UAC_RELOAD_MIN_INTERVAL"
-      mark_reload_attempt
-      reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
-        echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
-        recent_log="$(recent_kamailio_log)"
-        [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
-        return 1
-      }
+      echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
+      return 75
     fi
   fi
   if rpc_output_has_error <<<"$reload_output"; then
