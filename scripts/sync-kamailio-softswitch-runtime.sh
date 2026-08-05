@@ -43,6 +43,14 @@ registration_fingerprint() {
     | sha256sum | awk '{print $1}'
 }
 
+sanitize_rpc_output() {
+  tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300
+}
+
+rpc_output_has_error() {
+  grep -Eqi '(^|[[:space:]])error:|invalid|failed|not found|no such|does not exist'
+}
+
 fetch_registrations() {
   local use_revision="${1:-true}" http_code
   local request_headers=(-H "Authorization: Bearer ${api_token}" -H 'X-Softswitch-Engine: kamailio' -H 'Content-Type: application/json')
@@ -88,7 +96,7 @@ printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$re
 first_registration=true
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
-  add_output=""; register_output=""
+  add_output=""; refresh_output=""; register_output=""
   port="$(jq -r '.port // 5060' <<<"$item")"
   transport="$(jq -r '.transport // "udp" | ascii_downcase' <<<"$item")"
   local_user="$username"
@@ -113,13 +121,29 @@ while IFS= read -r item; do
     remove_registration "$id"
     [[ -n "$proxy" ]] || proxy="sip:${host}:${port};transport=${transport}"
     add_output="$(kamcmd uac.reg_add "$id" "$local_user" "$local_domain" "$username" "$host" "$realm" "$username" "$password" . "$proxy" "$expires" 0 0 . . 2>&1)" || {
-      echo "uac.reg_add failed for registration ${id}: $(tr '\n' ' ' <<<"$add_output" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)" >&2
+      echo "uac.reg_add failed for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
       exit 1
     }
+    if rpc_output_has_error <<<"$add_output"; then
+      echo "uac.reg_add returned an error for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
+      exit 1
+    fi
+    refresh_output="$(kamcmd uac.reg_refresh "$id" 2>&1)" || {
+      echo "uac.reg_refresh failed for registration ${id}: $(sanitize_rpc_output <<<"$refresh_output")" >&2
+      exit 1
+    }
+    if rpc_output_has_error <<<"$refresh_output"; then
+      echo "uac.reg_refresh returned an error for registration ${id}: $(sanitize_rpc_output <<<"$refresh_output")" >&2
+      exit 1
+    fi
     register_output="$(kamcmd uac.reg_register l_uuid "$id" 2>&1)" || {
-      echo "uac.reg_register failed for registration ${id}: $(tr '\n' ' ' <<<"$register_output" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)" >&2
+      echo "uac.reg_register failed for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
       exit 1
     }
+    if rpc_output_has_error <<<"$register_output"; then
+      echo "uac.reg_register returned an error for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
+      exit 1
+    fi
     registration_exists "$id" || {
       echo "uac registration ${id} was not visible after reg_add/register." >&2
       exit 1
