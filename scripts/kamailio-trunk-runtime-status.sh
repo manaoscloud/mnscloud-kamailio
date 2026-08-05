@@ -3,7 +3,11 @@ set -Eeuo pipefail
 
 [[ $# == 2 && "$1" == --input && -r "$2" && -f "$2" ]] || { echo 'Usage: kamailio-trunk-runtime-status.sh --input <json>' >&2; exit 64; }
 command -v jq >/dev/null && command -v kamcmd >/dev/null || { echo 'jq and kamcmd are required.' >&2; exit 69; }
+KAMCMD_TIMEOUT="${MNSCLOUD_SOFTSWITCH_KAMCMD_TIMEOUT:-10}"
 rpc_string() { printf 's:%s' "$1"; }
+kamcmd_call() {
+  timeout --preserve-status "${KAMCMD_TIMEOUT}" kamcmd "$@"
+}
 sanitize_runtime_output() {
   tr '\n' ' ' |
     sed -E 's/[[:space:]]+/ /g; s/(auth_password|password|authorization|credential):?[[:space:]]*[^[:space:]}]+/\1: [redacted]/Ig' |
@@ -20,15 +24,15 @@ while IFS= read -r trunk; do
     # The UAC RPC contract filters by attribute and value. The synchronizer uses
     # the UUID as l_uuid, so this gives an exact, bounded lookup.
     result=''; command_status=0
-    result="$(timeout 5 kamcmd uac.reg_info l_uuid "$(rpc_string "$uuid")" 2>&1)" || command_status=$?
+    result="$(kamcmd_call uac.reg_info l_uuid "$(rpc_string "$uuid")" 2>&1)" || command_status=$?
     entry="$result"
     flag_value="$(sed -n 's/.*flags:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$entry" | head -n1)"
     if [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered|record not found|(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)' <<<"$entry"; then
       status=not_registered; detail='Kamailio has no active trunk registration.'
       runtime_error="$(sanitize_runtime_output <<<"${entry:-$result}")"
       if grep -Eqi 'command uac\.reg_info not found' <<<"$result"; then
-        methods="$(timeout 5 kamcmd system.listMethods 2>&1 | grep -E '(^|[[:space:]])(uac\.|system\.)' | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180 || true)"
-        modules="$(timeout 5 kamcmd core.modules 2>&1 | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180 || true)"
+        methods="$(kamcmd_call system.listMethods 2>&1 | grep -E '(^|[[:space:]])(uac\.|system\.)' | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180 || true)"
+        modules="$(kamcmd_call core.modules 2>&1 | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180 || true)"
         runtime_error="UAC registration RPC is unavailable in the running Kamailio process.${methods:+ Available RPCs: ${methods}}${modules:+ Loaded modules: ${modules}}"
       fi
     elif [[ "$flag_value" =~ ^[0-9]+$ ]] && (( (flag_value & 4) == 4 )); then status=registered; detail='Kamailio registration is active.'

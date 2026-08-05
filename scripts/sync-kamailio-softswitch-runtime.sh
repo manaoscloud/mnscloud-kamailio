@@ -7,6 +7,9 @@ API_TOKEN_FILE="${MNSCLOUD_SOFTSWITCH_API_TOKEN_FILE:-/etc/mnscloud/softswitch/a
 STATE_FILE="${MNSCLOUD_SOFTSWITCH_REGISTRATION_STATE_FILE:-/etc/mnscloud/softswitch/runtime/registrations.json}"
 UAC_DB_TEXT_DIR="${MNSCLOUD_KAMAILIO_UAC_DB_TEXT_DIR:-/etc/mnscloud/softswitch/kamailio-db}"
 UACREG_FILE="${UAC_DB_TEXT_DIR}/uacreg"
+CURL_CONNECT_TIMEOUT="${MNSCLOUD_SOFTSWITCH_CURL_CONNECT_TIMEOUT:-5}"
+CURL_MAX_TIME="${MNSCLOUD_SOFTSWITCH_CURL_MAX_TIME:-30}"
+KAMCMD_TIMEOUT="${MNSCLOUD_SOFTSWITCH_KAMCMD_TIMEOUT:-10}"
 
 read_value() { tr -d '[:space:]' < "$1"; }
 rpc_string() { printf 's:%s' "$1"; }
@@ -22,8 +25,11 @@ dbtext_escape() {
 for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
   [[ -r "$required" ]] || { echo "missing required file: $required" >&2; exit 1; }
 done
-for command in curl jq kamcmd; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
-kamcmd uac.reg_active 1 >/dev/null 2>&1 || true
+for command in curl jq kamcmd timeout; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
+kamcmd_call() {
+  timeout --preserve-status "${KAMCMD_TIMEOUT}" kamcmd "$@"
+}
+kamcmd_call uac.reg_active 1 >/dev/null 2>&1 || true
 
 api_base="$(read_value "$API_BASE_FILE")"
 node_uuid="$(read_value "$NODE_UUID_FILE")"
@@ -40,7 +46,7 @@ registration_exists() {
   # The UAC RPC contract filters remote registrations by attribute and value.
   # Do not trust the local fingerprint cache when the running Kamailio process
   # has lost its in-memory registration table after a restart.
-  result="$(kamcmd uac.reg_info l_uuid "$(rpc_string "$id")" 2>&1)" || command_status=$?
+  result="$(kamcmd_call uac.reg_info l_uuid "$(rpc_string "$id")" 2>&1)" || command_status=$?
   [[ "$command_status" == 0 && -n "$result" ]] || return 1
   ! grep -Eqi '(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)|record not found|not found|no such|does not exist' <<<"$result"
 }
@@ -73,7 +79,7 @@ fetch_registrations() {
   local use_revision="${1:-true}" http_code
   local request_headers=(-H "Authorization: Bearer ${api_token}" -H 'X-Softswitch-Engine: kamailio' -H 'Content-Type: application/json')
   [[ "$use_revision" == true && -n "$previous_revision" ]] && request_headers+=(-H "If-None-Match: \"${previous_revision}\"")
-  http_code="$(curl -sS -o "$response" -w '%{http_code}' -X POST "${api_base%/}/api/v1/softswitch/runtime/registrations?node_uuid=${node_uuid}&engine=kamailio" "${request_headers[@]}" --data '{"engine":"kamailio"}')"
+  http_code="$(curl -sS --connect-timeout "$CURL_CONNECT_TIMEOUT" --max-time "$CURL_MAX_TIME" -o "$response" -w '%{http_code}' -X POST "${api_base%/}/api/v1/softswitch/runtime/registrations?node_uuid=${node_uuid}&engine=kamailio" "${request_headers[@]}" --data '{"engine":"kamailio"}')"
   printf "%s" "$http_code"
 }
 
@@ -162,7 +168,7 @@ done < <(jq -c '.data.registrations[]' "$response")
 printf ']}' >> "$next_state"
 install -d -m 0750 -o root -g root "$UAC_DB_TEXT_DIR"
 install -m 0640 -o root -g root "$next_uacreg" "$UACREG_FILE"
-reload_output="$(kamcmd uac.reg_reload 2>&1)" || {
+reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
   echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
   recent_log="$(recent_kamailio_log)"
   [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
@@ -176,7 +182,7 @@ if rpc_output_has_error <<<"$reload_output"; then
 fi
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
-  register_output="$(kamcmd uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
+  register_output="$(kamcmd_call uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
     echo "uac.reg_register failed for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
     exit 1
   }
