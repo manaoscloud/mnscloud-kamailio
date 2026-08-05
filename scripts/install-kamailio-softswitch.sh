@@ -120,15 +120,14 @@ ensure_uac_db_text() {
   install -d -m 0750 -o root -g root "${UAC_DB_TEXT_DIR}"
   if [[ ! -f "${uacreg_file}" ]]; then
     cat >"${uacreg_file}" <<'EOF_UACREG'
-id(int,auto) l_uuid(string) l_username(string) l_domain(string) r_username(string) r_domain(string) realm(string) auth_username(string) auth_password(string) auth_ha1(string) auth_proxy(string) expires(int) flags(int) reg_delay(int) contact_addr(string) socket(string)
+id(int,auto) l_uuid(str) l_username(str) l_domain(str) r_username(str) r_domain(str) realm(str,null) auth_username(str) auth_password(str,null) auth_ha1(str,null) auth_proxy(str) expires(int) flags(int) reg_delay(int) contact_addr(str,null) socket(str,null)
 EOF_UACREG
   fi
-  if [[ ! -f "${version_file}" ]]; then
+  if [[ ! -f "${version_file}" ]] || ! grep -Eq '^table_name\(str\)[[:space:]]+table_version\(int\)$' "${version_file}" || ! grep -Eq '^uacreg:5$' "${version_file}"; then
     cat >"${version_file}" <<'EOF_VERSION'
-0:uacreg:5
+table_name(str) table_version(int)
+uacreg:5
 EOF_VERSION
-  elif ! grep -Eq '^[0-9]+:uacreg:5$' "${version_file}"; then
-    printf '%s\n' '0:uacreg:5' >>"${version_file}"
   fi
   chown root:root "${uacreg_file}" "${version_file}"
   chmod 0640 "${uacreg_file}" "${version_file}"
