@@ -109,6 +109,19 @@ registration_diagnostic() {
   printf 'uac.reg_info(status=%s): %s' "$command_status" "$(sanitize_rpc_output <<<"$info")"
 }
 
+register_existing_registration() {
+  local id="$1" register_output=""
+  register_output="$(kamcmd_call uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
+    echo "uac.reg_register failed for cached registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
+    return 1
+  }
+  if rpc_output_has_error <<<"$register_output"; then
+    echo "uac.reg_register returned an error for cached registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
+    return 1
+  fi
+  registration_is_active_or_in_progress "$id"
+}
+
 rpc_output_has_error() {
   grep -Eqi '(^|[[:space:]])error:|invalid|failed|not found|no such|does not exist'
 }
@@ -190,8 +203,10 @@ if [[ "$http_code" == 304 ]]; then
   while IFS= read -r id; do
     [[ -z "$id" ]] && continue
     if ! registration_is_active_or_in_progress "$id"; then
-      missing_runtime_registration=true
-      break
+      if ! register_existing_registration "$id"; then
+        missing_runtime_registration=true
+        break
+      fi
     fi
   done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload")
   if [[ "$missing_runtime_registration" == false ]]; then
