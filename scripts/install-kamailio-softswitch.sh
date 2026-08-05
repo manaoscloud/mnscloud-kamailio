@@ -802,10 +802,6 @@ ${rtpengine_delete}
   run "chown root:'${cfg_group}' '${cfg}'"
   run "chmod 0640 '${cfg}'"
   run "kamailio -c -f '${cfg}'"
-  if id -u "${KAMAILIO_RUNTIME_USER}" >/dev/null 2>&1; then
-    ensure_kamailio_runtime_dir
-    run "runuser -u '${KAMAILIO_RUNTIME_USER}' -- kamailio -c -f '${cfg}'"
-  fi
 }
 
 install_systemd_override() {
@@ -839,7 +835,6 @@ ensure_kamailio_runtime_dir() {
 enable_service() {
   run "systemctl enable kamailio"
   stop_existing_kamailio
-  ensure_kamailio_runtime_dir
   run "systemctl reset-failed kamailio 2>/dev/null || true"
   if ! run "systemctl start kamailio"; then
     run "systemctl status kamailio --no-pager -l || true"
