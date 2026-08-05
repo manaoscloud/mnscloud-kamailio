@@ -288,10 +288,22 @@ printf ']}' >> "$next_state"
 install -d -m 0750 -o "$uac_owner" -g "$uac_group" "$UAC_DB_TEXT_DIR"
 install -m 0640 -o "$uac_owner" -g "$uac_group" "$next_uacreg" "$UACREG_FILE"
 install -d -m 0750 -o root -g root "$(dirname "$UAC_RELOAD_LOCK_FILE")"
+reload_status=0
 (
   flock -x 9
   reload_uac_registrations
-) 9>"$UAC_RELOAD_LOCK_FILE"
+) 9>"$UAC_RELOAD_LOCK_FILE" || reload_status=$?
+if (( reload_status == 75 )); then
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    register_existing_registration "$id" || {
+      echo "uac.reg_reload was temporarily deferred and cached registration ${id} could not be activated. $(registration_diagnostic "$id"). recent kamailio log: $(recent_kamailio_log)" >&2
+      exit 75
+    }
+  done < <(jq -r '.registrations[]?.registrationUUID // empty' "$next_state")
+elif (( reload_status != 0 )); then
+  exit "$reload_status"
+fi
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
   register_output="$(kamcmd_call uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
