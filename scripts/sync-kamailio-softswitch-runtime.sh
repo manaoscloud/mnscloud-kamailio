@@ -143,7 +143,6 @@ reload_uac_registrations() {
     echo "uac.reg_reload temporarily deferred: Kamailio UAC reload window is still active; retry after ${retry_after}s." >&2
     return 75
   fi
-  mark_reload_attempt
   reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
     if reload_output_is_shift_throttle <<<"$reload_output"; then
       echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
@@ -167,6 +166,7 @@ reload_uac_registrations() {
     [[ -z "$recent_log" ]] || echo "recent kamailio log: ${recent_log}" >&2
     return 1
   fi
+  mark_reload_attempt
 }
 
 fetch_registrations() {
