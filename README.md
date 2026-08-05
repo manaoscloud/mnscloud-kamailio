@@ -70,7 +70,7 @@ only the current delta to Kamailio.
 
 Kamailio's official UAC remote-registration feature requires `reg_db_url` and `reg_contact_addr`
 before it exposes and runs the `uac.reg_*` RPC flow. The installer therefore creates a minimal local
-`db_text` backend at `/etc/mnscloud/softswitch/kamailio-db` and resolves the registration contact
+`db_text` backend (`text://`) at `/etc/mnscloud/softswitch/kamailio-db` and resolves the registration contact
 address from `MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR`, then public IP, private IP, or hostname, adding
 `:5060` when no port is provided. This is local Kamailio runtime state only; it is not the MNSCloud
 central database, does not authorize tenants, does not resolve secrets, and does not bypass the
