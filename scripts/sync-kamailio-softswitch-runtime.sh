@@ -97,7 +97,7 @@ printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$re
 first_registration=true
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
-  add_output=""; refresh_output=""; register_output=""; proxy_scheme=""
+  add_output=""; register_output=""; proxy_scheme=""
   port="$(jq -r '.port // 5060' <<<"$item")"
   transport="$(jq -r '.transport // "udp" | ascii_downcase' <<<"$item")"
   local_user="$username"
@@ -131,14 +131,6 @@ while IFS= read -r item; do
     }
     if rpc_output_has_error <<<"$add_output"; then
       echo "uac.reg_add returned an error for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
-      exit 1
-    fi
-    refresh_output="$(kamcmd uac.reg_refresh "$(rpc_string "$id")" 2>&1)" || {
-      echo "uac.reg_refresh failed for registration ${id}: $(sanitize_rpc_output <<<"$refresh_output")" >&2
-      exit 1
-    }
-    if rpc_output_has_error <<<"$refresh_output"; then
-      echo "uac.reg_refresh returned an error for registration ${id}: $(sanitize_rpc_output <<<"$refresh_output")" >&2
       exit 1
     fi
     register_output="$(kamcmd uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
