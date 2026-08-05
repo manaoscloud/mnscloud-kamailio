@@ -21,6 +21,7 @@ grep -Fq 'loadmodule \"db_text.so\"' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_db_url\", \"db_text://' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_contact_addr\", \"' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_active\", 1)' "$installer"
+grep -Fq 'table_name(str) table_version(int)' "$installer"
 grep -Fq 'uacreg:5' "$installer"
 
 validate_http_client_calls() {
