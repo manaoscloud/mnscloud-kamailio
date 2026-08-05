@@ -101,7 +101,7 @@ next_state="$(mktemp)"
 next_uacreg="$(mktemp)"
 trap 'rm -f "$response" "$next_state" "$next_uacreg"' EXIT
 printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$response")" > "$next_state"
-printf '%s\n' 'id(int,auto) l_uuid(str) l_username(str) l_domain(str) r_username(str) r_domain(str) realm(str,null) auth_username(str) auth_password(str,null) auth_ha1(str,null) auth_proxy(str) expires(int) flags(int) reg_delay(int) contact_addr(str,null) socket(str,null)' > "$next_uacreg"
+printf '%s\n' 'id(int,auto) l_uuid(string) l_username(string) l_domain(string) r_username(string) r_domain(string) realm(string) auth_username(string) auth_password(string) auth_ha1(string) auth_proxy(string) expires(int) flags(int) reg_delay(int) contact_addr(string) socket(string)' > "$next_uacreg"
 first_registration=true
 row_id=0
 while IFS= read -r item; do
