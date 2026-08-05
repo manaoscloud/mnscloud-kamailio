@@ -16,9 +16,7 @@ while IFS= read -r trunk; do
     result=''; command_status=0
     result="$(timeout 5 kamcmd uac.reg_info l_uuid "$uuid" 2>&1)" || command_status=$?
     entry="$result"
-    if grep -Eqi 'registered|state[=: ]+ok' <<<"$entry"; then status=registered; detail='Kamailio registration is active.'
-    elif grep -Eqi 'registering|trying' <<<"$entry"; then status=registering; detail='Kamailio is registering the trunk.'
-    elif [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered' <<<"$entry"; then
+    if [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered|record not found|(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)' <<<"$entry"; then
       status=not_registered; detail='Kamailio has no active trunk registration.'
       runtime_error="$(tr '\n' ' ' <<<"${entry:-$result}" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)"
       if grep -Eqi 'command uac\.reg_info not found' <<<"$result"; then
@@ -26,6 +24,8 @@ while IFS= read -r trunk; do
         modules="$(timeout 5 kamcmd core.modules 2>&1 | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g' | cut -c1-180 || true)"
         runtime_error="UAC registration RPC is unavailable in the running Kamailio process.${methods:+ Available RPCs: ${methods}}${modules:+ Loaded modules: ${modules}}"
       fi
+    elif grep -Eqi 'registered|state[=: ]+ok' <<<"$entry"; then status=registered; detail='Kamailio registration is active.'
+    elif grep -Eqi 'registering|trying' <<<"$entry"; then status=registering; detail='Kamailio is registering the trunk.'
     else
       status=unknown; detail='Kamailio could not determine the trunk registration state.'
       runtime_error="$(tr '\n' ' ' <<<"$result" | sed -E 's/[[:space:]]+/ /g' | cut -c1-300)"
