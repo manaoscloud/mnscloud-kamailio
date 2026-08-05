@@ -5,9 +5,21 @@ API_BASE_FILE="${MNSCLOUD_SOFTSWITCH_API_BASE_FILE:-/etc/mnscloud/softswitch/api
 NODE_UUID_FILE="${MNSCLOUD_SOFTSWITCH_NODE_UUID_FILE:-/etc/mnscloud/softswitch/node.uuid}"
 API_TOKEN_FILE="${MNSCLOUD_SOFTSWITCH_API_TOKEN_FILE:-/etc/mnscloud/softswitch/api.token}"
 STATE_FILE="${MNSCLOUD_SOFTSWITCH_REGISTRATION_STATE_FILE:-/etc/mnscloud/softswitch/runtime/registrations.json}"
+UAC_DB_TEXT_DIR="${MNSCLOUD_KAMAILIO_UAC_DB_TEXT_DIR:-/etc/mnscloud/softswitch/kamailio-db}"
+UACREG_FILE="${UAC_DB_TEXT_DIR}/uacreg"
 
 read_value() { tr -d '[:space:]' < "$1"; }
 rpc_string() { printf 's:%s' "$1"; }
+dbtext_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  value="${value//:/\\:}"
+  value="${value//0/\\0}"
+  printf '%s' "$value"
+}
 for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
   [[ -r "$required" ]] || { echo "missing required file: $required" >&2; exit 1; }
 done
@@ -23,12 +35,6 @@ state_payload='{"registrations":[]}'
 previous_revision="$(jq -r '.revision // empty' <<<"$state_payload")"
 response="$(mktemp)"
 trap 'rm -f "$response"' EXIT
-
-remove_registration() {
-  local id="$1"
-  kamcmd uac.reg_unregister l_uuid "$(rpc_string "$id")" >/dev/null 2>&1 || true
-  kamcmd uac.reg_remove "$(rpc_string "$id")" >/dev/null 2>&1 || true
-}
 
 registration_exists() {
   local id="$1" result="" command_status=0
@@ -93,9 +99,12 @@ while IFS= read -r id; do
 done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload")
 
 next_state="$(mktemp)"
-trap 'rm -f "$response" "$next_state"' EXIT
+next_uacreg="$(mktemp)"
+trap 'rm -f "$response" "$next_state" "$next_uacreg"' EXIT
 printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$response")" > "$next_state"
+printf '%s\n' 'id(int,auto) l_uuid(str) l_username(str) l_domain(str) r_username(str) r_domain(str) realm(str,null) auth_username(str) auth_password(str,null) auth_ha1(str,null) auth_proxy(str) expires(int) flags(int) reg_delay(int) contact_addr(str,null) socket(str,null)' > "$next_uacreg"
 first_registration=true
+row_id=0
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
   add_output=""; register_output=""; proxy_scheme=""
@@ -118,40 +127,54 @@ while IFS= read -r item; do
     exit 1
   }
   case "$transport" in udp|tcp|tls) ;; *) echo "runtime registration payload contains invalid transport" >&2; exit 1 ;; esac
-  previous_fingerprint="$(jq -r --arg id "$id" '.registrations[]? | select(.registrationUUID == $id) | .fingerprint // empty' <<<"$state_payload")"
-  if [[ "$fingerprint" != "$previous_fingerprint" ]] || ! registration_exists "$id"; then
-    remove_registration "$id"
-    if [[ -z "$proxy" ]]; then
-      proxy_scheme="sip"
-      [[ "$transport" == "tls" ]] && proxy_scheme="sips"
-      proxy="${proxy_scheme}:${host}:${port}"
-    fi
-    add_output="$(kamcmd uac.reg_add "$(rpc_string "$id")" "$(rpc_string "$local_user")" "$(rpc_string "$local_domain")" "$(rpc_string "$username")" "$(rpc_string "$host")" "$(rpc_string "$realm")" "$(rpc_string "$username")" "$(rpc_string "$password")" . "$(rpc_string "$proxy")" "$expires" 0 0 . . 2>&1)" || {
-      echo "uac.reg_add failed for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
-      exit 1
-    }
-    if rpc_output_has_error <<<"$add_output"; then
-      echo "uac.reg_add returned an error for registration ${id}: $(sanitize_rpc_output <<<"$add_output")" >&2
-      exit 1
-    fi
-    register_output="$(kamcmd uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
-      echo "uac.reg_register failed for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
-      exit 1
-    }
-    if rpc_output_has_error <<<"$register_output"; then
-      echo "uac.reg_register returned an error for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
-      exit 1
-    fi
-    registration_exists "$id" || {
-      echo "uac registration ${id} was not visible after reg_add/register." >&2
-      exit 1
-    }
+  if [[ -z "$proxy" ]]; then
+    proxy_scheme="sip"
+    [[ "$transport" == "tls" ]] && proxy_scheme="sips"
+    proxy="${proxy_scheme}:${host}:${port}"
   fi
+  row_id=$((row_id + 1))
+  printf '%s:%s:%s:%s:%s:%s:%s:%s:%s::%s:%s:0:0::\n' \
+    "$row_id" \
+    "$(dbtext_escape "$id")" \
+    "$(dbtext_escape "$local_user")" \
+    "$(dbtext_escape "$local_domain")" \
+    "$(dbtext_escape "$username")" \
+    "$(dbtext_escape "$host")" \
+    "$(dbtext_escape "$realm")" \
+    "$(dbtext_escape "$username")" \
+    "$(dbtext_escape "$password")" \
+    "$(dbtext_escape "$proxy")" \
+    "$expires" >> "$next_uacreg"
   $first_registration || printf ',' >> "$next_state"
   first_registration=false
   jq -cn --arg registrationUUID "$id" --arg fingerprint "$fingerprint" '{registrationUUID:$registrationUUID, fingerprint:$fingerprint}' >> "$next_state"
 done < <(jq -c '.data.registrations[]' "$response")
 printf ']}' >> "$next_state"
+install -d -m 0750 -o root -g root "$UAC_DB_TEXT_DIR"
+install -m 0640 -o root -g root "$next_uacreg" "$UACREG_FILE"
+reload_output="$(kamcmd uac.reg_reload 2>&1)" || {
+  echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
+  exit 1
+}
+if rpc_output_has_error <<<"$reload_output"; then
+  echo "uac.reg_reload returned an error: $(sanitize_rpc_output <<<"$reload_output")" >&2
+  exit 1
+fi
+while IFS= read -r id; do
+  [[ -z "$id" ]] && continue
+  register_output="$(kamcmd uac.reg_register l_uuid "$(rpc_string "$id")" 2>&1)" || {
+    echo "uac.reg_register failed for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
+    exit 1
+  }
+  if rpc_output_has_error <<<"$register_output"; then
+    echo "uac.reg_register returned an error for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
+    exit 1
+  fi
+  registration_exists "$id" || {
+    echo "uac registration ${id} was not visible after db_text reload/register." >&2
+    exit 1
+  }
+done < <(jq -r '.registrations[]?.registrationUUID // empty' "$next_state")
 install -m 0640 -o root -g root "$next_state" "$STATE_FILE"
 chown root:root "$STATE_FILE"; chmod 0640 "$STATE_FILE"
 echo "[sync-kamailio-softswitch-runtime] synchronized $(jq '.data.registrations | length' "$response") outbound registration(s)"
