@@ -57,14 +57,18 @@ previous_revision="$(jq -r '.revision // empty' <<<"$state_payload")"
 response="$(mktemp)"
 trap 'rm -f "$response"' EXIT
 
-registration_exists() {
-  local id="$1" result="" command_status=0
+registration_is_active_or_in_progress() {
+  local id="$1" result="" command_status=0 flag_value=""
   # The UAC RPC contract filters remote registrations by attribute and value.
   # Do not trust the local fingerprint cache when the running Kamailio process
-  # has lost its in-memory registration table after a restart.
+  # has lost its in-memory registration table after a restart. A profile loaded
+  # with flag 16 is only initialized; it is not enough to skip reg_register.
   result="$(kamcmd_call uac.reg_info l_uuid "$(rpc_string "$id")" 2>&1)" || command_status=$?
   [[ "$command_status" == 0 && -n "$result" ]] || return 1
-  ! grep -Eqi '(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)|record not found|not found|no such|does not exist' <<<"$result"
+  ! grep -Eqi '(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)|record not found|not found|no such|does not exist' <<<"$result" || return 1
+  flag_value="$(sed -n 's/.*flags:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$result" | head -n1)"
+  [[ "$flag_value" =~ ^[0-9]+$ ]] || return 1
+  (( (flag_value & 14) != 0 ))
 }
 
 registration_fingerprint() {
@@ -167,7 +171,7 @@ if [[ "$http_code" == 304 ]]; then
   fi
   while IFS= read -r id; do
     [[ -z "$id" ]] && continue
-    if ! registration_exists "$id"; then
+    if ! registration_is_active_or_in_progress "$id"; then
       missing_runtime_registration=true
       break
     fi
@@ -265,8 +269,8 @@ while IFS= read -r id; do
     echo "uac.reg_register returned an error for registration ${id}: $(sanitize_rpc_output <<<"$register_output")" >&2
     exit 1
   fi
-  registration_exists "$id" || {
-    echo "uac registration ${id} was not visible after db_text reload/register." >&2
+  registration_is_active_or_in_progress "$id" || {
+    echo "uac registration ${id} was not active or in progress after db_text reload/register." >&2
     exit 1
   }
 done < <(jq -r '.registrations[]?.registrationUUID // empty' "$next_state")
