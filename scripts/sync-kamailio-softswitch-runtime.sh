@@ -11,6 +11,8 @@ UAC_RELOAD_STAMP_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_STAMP_FILE:-/etc/mnscloud/
 UAC_RELOAD_LOCK_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_LOCK_FILE:-/run/mnscloud-softswitch-uac-reload.lock}"
 UAC_RELOAD_MIN_INTERVAL="${MNSCLOUD_KAMAILIO_UAC_RELOAD_MIN_INTERVAL:-155}"
 UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
+KAMAILIO_RUNTIME_USER="${MNSCLOUD_KAMAILIO_RUNTIME_USER:-kamailio}"
+KAMAILIO_RUNTIME_GROUP="${MNSCLOUD_KAMAILIO_RUNTIME_GROUP:-kamailio}"
 CURL_CONNECT_TIMEOUT="${MNSCLOUD_SOFTSWITCH_CURL_CONNECT_TIMEOUT:-5}"
 CURL_MAX_TIME="${MNSCLOUD_SOFTSWITCH_CURL_MAX_TIME:-30}"
 KAMCMD_TIMEOUT="${MNSCLOUD_SOFTSWITCH_KAMCMD_TIMEOUT:-10}"
@@ -42,6 +44,12 @@ kamcmd_call uac.reg_active 1 >/dev/null 2>&1 || true
 api_base="$(read_value "$API_BASE_FILE")"
 node_uuid="$(read_value "$NODE_UUID_FILE")"
 api_token="$(read_value "$API_TOKEN_FILE")"
+uac_owner="$KAMAILIO_RUNTIME_USER"
+uac_group="$KAMAILIO_RUNTIME_GROUP"
+if ! id -u "$uac_owner" >/dev/null 2>&1 || ! getent group "$uac_group" >/dev/null 2>&1; then
+  uac_owner="root"
+  uac_group="root"
+fi
 install -d -m 0750 "$(dirname "$STATE_FILE")"
 state_payload='{"registrations":[]}'
 [[ -r "$STATE_FILE" ]] && state_payload="$(cat "$STATE_FILE")"
@@ -240,8 +248,8 @@ while IFS= read -r item; do
   jq -cn --arg registrationUUID "$id" --arg fingerprint "$fingerprint" '{registrationUUID:$registrationUUID, fingerprint:$fingerprint}' >> "$next_state"
 done < <(jq -c '.data.registrations[]' "$response")
 printf ']}' >> "$next_state"
-install -d -m 0750 -o root -g root "$UAC_DB_TEXT_DIR"
-install -m 0640 -o root -g root "$next_uacreg" "$UACREG_FILE"
+install -d -m 0750 -o "$uac_owner" -g "$uac_group" "$UAC_DB_TEXT_DIR"
+install -m 0640 -o "$uac_owner" -g "$uac_group" "$next_uacreg" "$UACREG_FILE"
 install -d -m 0750 -o root -g root "$(dirname "$UAC_RELOAD_LOCK_FILE")"
 (
   flock -x 9

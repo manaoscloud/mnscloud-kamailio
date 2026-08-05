@@ -20,6 +20,8 @@ API_TOKEN="${MNSCLOUD_SOFTSWITCH_API_TOKEN:-}"
 MEDIA_SOCKET=""
 UAC_CONTACT_ADDR="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}"
 UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
+KAMAILIO_RUNTIME_USER="${MNSCLOUD_KAMAILIO_RUNTIME_USER:-kamailio}"
+KAMAILIO_RUNTIME_GROUP="${MNSCLOUD_KAMAILIO_RUNTIME_GROUP:-kamailio}"
 KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}"
 KAMAILIO_RUNTIME_KIT_REPO_URL="${KAMAILIO_RUNTIME_KIT_REPO_URL:-https://github.com/manaoscloud/mnscloud-runtime-kit.git}"
 KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
@@ -119,13 +121,19 @@ ensure_uac_contact_addr() {
 ensure_uac_db_text() {
   local version_file="${UAC_DB_TEXT_DIR}/version"
   local uacreg_file="${UAC_DB_TEXT_DIR}/uacreg"
+  local owner="${KAMAILIO_RUNTIME_USER}"
+  local group="${KAMAILIO_RUNTIME_GROUP}"
+  if ! id -u "${owner}" >/dev/null 2>&1 || ! getent group "${group}" >/dev/null 2>&1; then
+    owner="root"
+    group="root"
+  fi
   if [[ "$DRY_RUN" == true ]]; then
     log DRY "install -d -m 0750 '${UAC_DB_TEXT_DIR}'"
     log DRY "install UAC db_text schema files in '${UAC_DB_TEXT_DIR}'"
     return 0
   fi
 
-  install -d -m 0750 -o root -g root "${UAC_DB_TEXT_DIR}"
+  install -d -m 0750 -o "${owner}" -g "${group}" "${UAC_DB_TEXT_DIR}"
   if [[ ! -f "${uacreg_file}" ]]; then
     cat >"${uacreg_file}" <<'EOF_UACREG'
 id(int,auto) l_uuid(str) l_username(str) l_domain(str) r_username(str) r_domain(str) realm(str) auth_username(str) auth_password(str) auth_ha1(str,null) auth_proxy(str) expires(int) flags(int) reg_delay(int) contact_addr(str,null) socket(str,null)
@@ -142,7 +150,7 @@ id(int,auto) table_name(str) table_version(int)
 1:uacreg:5
 EOF_VERSION
   fi
-  chown root:root "${uacreg_file}" "${version_file}"
+  chown "${owner}:${group}" "${uacreg_file}" "${version_file}"
   chmod 0640 "${uacreg_file}" "${version_file}"
 }
 
