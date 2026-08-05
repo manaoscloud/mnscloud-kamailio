@@ -814,6 +814,9 @@ install_systemd_override() {
   install -d -m 0755 "${override_dir}"
   cat >"${override_file}" <<'EOF_SYSTEMD_OVERRIDE'
 [Service]
+Type=simple
+ExecStart=
+ExecStart=/usr/sbin/kamailio -DD -E -P /run/kamailio/kamailio.pid -f $CFGFILE -m $SHM_MEMORY -M $PKG_MEMORY --atexit=no
 StandardOutput=null
 StandardError=journal
 EOF_SYSTEMD_OVERRIDE
