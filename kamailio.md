@@ -129,10 +129,13 @@ configuração canônica; o Agent do servidor recebe o job `voip.softswitch.runt
 `scripts/sync-kamailio-softswitch-runtime.sh`. O script consulta `/runtime/registrations`, aplica
 somente o delta pelo módulo UAC do Kamailio e remove explicitamente registros que deixaram de
 existir no controle de plano. Para habilitar oficialmente os RPCs `uac.reg_*`, o Kamailio exige
-`reg_db_url`; o instalador usa `db_text` local em `/etc/mnscloud/softswitch/kamailio-db`. Esse é um
-estado interno do Kamailio para remote registration, não conexão ao banco central MNSCloud. A origem
-dos trunks, senhas, autorização, tenant e roteamento continua sendo a API/control-plane. Não há
-polling periódico ou fallback local para essa configuração.
+`reg_db_url` e `reg_contact_addr`; o instalador usa `db_text` local em
+`/etc/mnscloud/softswitch/kamailio-db` e resolve o contato de registro por
+`MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR`, IP público, IP privado ou hostname, adicionando `:5060` quando
+nenhuma porta for informada. Esse é um estado interno do Kamailio para remote registration, não
+conexão ao banco central MNSCloud. A origem dos trunks, senhas, autorização, tenant e roteamento
+continua sendo a API/control-plane. Não há polling periódico ou fallback local para essa
+configuração.
 
 Troncos `ip_acl` não executam REGISTER: eles são identificados exclusivamente pelos IPs/CIDRs
 autorizados durante a decisão inbound da API.

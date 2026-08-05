@@ -18,6 +18,7 @@ NODE_UUID="${MNSCLOUD_SOFTSWITCH_NODE_UUID:-}"
 API_BASE=""
 API_TOKEN="${MNSCLOUD_SOFTSWITCH_API_TOKEN:-}"
 MEDIA_SOCKET=""
+UAC_CONTACT_ADDR="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}"
 KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}"
 KAMAILIO_RUNTIME_KIT_REPO_URL="${KAMAILIO_RUNTIME_KIT_REPO_URL:-https://github.com/manaoscloud/mnscloud-runtime-kit.git}"
 KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
@@ -59,6 +60,52 @@ validate_pike_settings() {
       return 1
     }
   done
+}
+
+normalize_uac_contact_addr() {
+  local value="$1"
+  value="$(printf "%s" "$value" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  [[ -n "${value}" ]] || return 1
+  [[ "${value}" != *[[:space:]]* ]] || return 1
+  if [[ "${value}" == *:* ]]; then
+    printf "%s" "${value}"
+  else
+    printf "%s:5060" "${value}"
+  fi
+}
+
+resolve_uac_contact_addr() {
+  local public_ip="${1:-}" private_ip="${2:-}" hostname_value="${3:-}" candidate=""
+  if [[ -n "${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}" ]]; then
+    candidate="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR}"
+  elif [[ -n "${UAC_CONTACT_ADDR}" ]]; then
+    candidate="${UAC_CONTACT_ADDR}"
+  elif [[ -n "${public_ip}" ]]; then
+    candidate="${public_ip}"
+  elif [[ -n "${private_ip}" ]]; then
+    candidate="${private_ip}"
+  else
+    candidate="${hostname_value}"
+  fi
+  normalize_uac_contact_addr "${candidate}"
+}
+
+ensure_uac_contact_addr() {
+  local hostname_value private_ip public_ip
+  if [[ -n "${UAC_CONTACT_ADDR}" ]]; then
+    UAC_CONTACT_ADDR="$(normalize_uac_contact_addr "${UAC_CONTACT_ADDR}")" || {
+      err "MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR invalido. Use host[:port] sem espacos."
+      return 1
+    }
+    return 0
+  fi
+  hostname_value="$(hostname -f 2>/dev/null || hostname 2>/dev/null || true)"
+  private_ip="$(private_ipv4)"
+  public_ip="$(public_ipv4)"
+  UAC_CONTACT_ADDR="$(resolve_uac_contact_addr "${public_ip}" "${private_ip}" "${hostname_value}")" || {
+    err "Nao foi possivel resolver reg_contact_addr do Kamailio UAC. Defina MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR=host:port."
+    return 1
+  }
 }
 
 ensure_uac_db_text() {
@@ -271,6 +318,7 @@ bootstrap_node_via_api() {
   hostname_value="$(hostname -f 2>/dev/null || hostname 2>/dev/null || true)"
   private_ip="$(private_ipv4)"
   public_ip="$(public_ipv4)"
+  UAC_CONTACT_ADDR="$(resolve_uac_contact_addr "${public_ip}" "${private_ip}" "${hostname_value}")" || UAC_CONTACT_ADDR=""
   payload="{\"engine\":\"$(json_escape "${SOFTSWITCH_ENGINE}")\",\"hostname\":\"$(json_escape "${hostname_value}")\""
   [[ -n "${private_ip}" ]] && payload+=",\"privateIP\":\"$(json_escape "${private_ip}")\""
   [[ -n "${public_ip}" ]] && payload+=",\"publicIP\":\"$(json_escape "${public_ip}")\""
@@ -456,6 +504,7 @@ modparam(\"pike\", \"sampling_time_unit\", ${KAMAILIO_PIKE_SAMPLING_TIME_UNIT})
 modparam(\"pike\", \"reqs_density_per_unit\", ${KAMAILIO_PIKE_REQUEST_DENSITY})
 modparam(\"pike\", \"remove_latency\", ${KAMAILIO_PIKE_REMOVE_LATENCY})
 modparam(\"uac\", \"reg_db_url\", \"db_text://${UAC_DB_TEXT_DIR}\")
+modparam(\"uac\", \"reg_contact_addr\", \"${UAC_CONTACT_ADDR}\")
 modparam(\"uac\", \"reg_timer_interval\", 60)
 modparam(\"uac\", \"reg_retry_interval\", 300)
 ${rtpengine_params}
@@ -761,6 +810,7 @@ main() {
   esac
   stop_existing_kamailio
   bootstrap_node_via_api || true
+  ensure_uac_contact_addr
   write_kamailio_config
   enable_service
   ok "Kamailio installed. Node UUID: ${NODE_UUID}"
