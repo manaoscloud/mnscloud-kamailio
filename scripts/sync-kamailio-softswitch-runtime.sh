@@ -12,6 +12,7 @@ for required in "$API_BASE_FILE" "$NODE_UUID_FILE" "$API_TOKEN_FILE"; do
   [[ -r "$required" ]] || { echo "missing required file: $required" >&2; exit 1; }
 done
 for command in curl jq kamcmd; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
+kamcmd uac.reg_active 1 >/dev/null 2>&1 || true
 
 api_base="$(read_value "$API_BASE_FILE")"
 node_uuid="$(read_value "$NODE_UUID_FILE")"

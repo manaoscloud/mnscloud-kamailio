@@ -505,6 +505,7 @@ modparam(\"pike\", \"reqs_density_per_unit\", ${KAMAILIO_PIKE_REQUEST_DENSITY})
 modparam(\"pike\", \"remove_latency\", ${KAMAILIO_PIKE_REMOVE_LATENCY})
 modparam(\"uac\", \"reg_db_url\", \"db_text://${UAC_DB_TEXT_DIR}\")
 modparam(\"uac\", \"reg_contact_addr\", \"${UAC_CONTACT_ADDR}\")
+modparam(\"uac\", \"reg_active\", 1)
 modparam(\"uac\", \"reg_timer_interval\", 60)
 modparam(\"uac\", \"reg_retry_interval\", 300)
 ${rtpengine_params}
