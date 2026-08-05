@@ -802,6 +802,27 @@ ${rtpengine_delete}
   run "chown root:'${cfg_group}' '${cfg}'"
   run "chmod 0640 '${cfg}'"
   run "kamailio -c -f '${cfg}'"
+  if id -u "${KAMAILIO_RUNTIME_USER}" >/dev/null 2>&1; then
+    run "runuser -u '${KAMAILIO_RUNTIME_USER}' -- kamailio -c -f '${cfg}'"
+  fi
+}
+
+install_systemd_override() {
+  local override_dir="/etc/systemd/system/kamailio.service.d"
+  local override_file="${override_dir}/mnscloud-softswitch.conf"
+  if [[ "$DRY_RUN" == true ]]; then
+    log DRY "install Kamailio systemd override at ${override_file}"
+    return 0
+  fi
+  install -d -m 0755 "${override_dir}"
+  cat >"${override_file}" <<'EOF_SYSTEMD_OVERRIDE'
+[Service]
+StandardOutput=null
+StandardError=journal
+EOF_SYSTEMD_OVERRIDE
+  chown root:root "${override_file}"
+  chmod 0644 "${override_file}"
+  run "systemctl daemon-reload"
 }
 
 enable_service() {
@@ -835,6 +856,7 @@ main() {
   run "install -d -m 0750 '/etc/mnscloud/softswitch/runtime'"
   run "chown root:root '/etc/mnscloud/softswitch/runtime'"
   ensure_uac_db_text
+  install_systemd_override
   case "$(detect_kamailio_os)" in
     debian) install_packages_debian ;;
     rocky) install_packages_rocky ;;
