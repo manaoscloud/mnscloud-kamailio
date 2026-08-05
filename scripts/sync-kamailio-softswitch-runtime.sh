@@ -40,11 +40,13 @@ remove_registration() {
 }
 
 registration_exists() {
-  local id="$1"
+  local id="$1" result="" command_status=0
   # The UAC RPC contract filters remote registrations by attribute and value.
   # Do not trust the local fingerprint cache when the running Kamailio process
   # has lost its in-memory registration table after a restart.
-  kamcmd uac.reg_info l_uuid "$id" >/dev/null 2>&1
+  result="$(kamcmd uac.reg_info l_uuid "$id" 2>&1)" || command_status=$?
+  [[ "$command_status" == 0 && -n "$result" ]] || return 1
+  ! grep -Eqi '(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)|record not found|not found|no such|does not exist' <<<"$result"
 }
 
 while IFS= read -r id; do
@@ -60,6 +62,7 @@ printf '{"revision":%s,"registrations":[' "$(jq -c '.data.revision // null' "$re
 first_registration=true
 while IFS= read -r item; do
   id="$(jq -r '.registrationUUID' <<<"$item")"; username="$(jq -r '.username' <<<"$item")"; password="$(jq -r '.password' <<<"$item")"; host="$(jq -r '.host' <<<"$item")"
+  add_output=""; register_output=""
   port="$(jq -r '.port // 5060' <<<"$item")"
   transport="$(jq -r '.transport // "udp" | ascii_downcase' <<<"$item")"
   local_user="$username"
@@ -83,8 +86,18 @@ while IFS= read -r item; do
   if [[ "$fingerprint" != "$previous_fingerprint" ]] || ! registration_exists "$id"; then
     remove_registration "$id"
     [[ -n "$proxy" ]] || proxy="sip:${host}:${port};transport=${transport}"
-    kamcmd uac.reg_add "$id" "$local_user" "$local_domain" "$username" "$host" "$realm" "$username" "$password" . "$proxy" "$expires" 0 0 . . >/dev/null
-    kamcmd uac.reg_register l_uuid "$id" >/dev/null
+    add_output="$(kamcmd uac.reg_add "$id" "$local_user" "$local_domain" "$username" "$host" "$realm" "$username" "$password" . "$proxy" "$expires" 0 0 . . 2>&1)" || {
+      echo "uac.reg_add failed for registration ${id}: $(tr '\n' ' ' <<<"$add_output" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)" >&2
+      exit 1
+    }
+    register_output="$(kamcmd uac.reg_register l_uuid "$id" 2>&1)" || {
+      echo "uac.reg_register failed for registration ${id}: $(tr '\n' ' ' <<<"$register_output" | sed -E 's/[[:space:]]+/ /g; s/(password|authorization|credential)[^ ]*/[redacted]/Ig' | cut -c1-300)" >&2
+      exit 1
+    }
+    registration_exists "$id" || {
+      echo "uac registration ${id} was not visible after reg_add/register." >&2
+      exit 1
+    }
   fi
   $first_registration || printf ',' >> "$next_state"
   first_registration=false
