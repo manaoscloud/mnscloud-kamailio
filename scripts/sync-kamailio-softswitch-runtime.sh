@@ -54,6 +54,10 @@ fetch_registrations() {
 http_code="$(fetch_registrations true)"
 if [[ "$http_code" == 304 ]]; then
   missing_runtime_registration=false
+  cached_registration_count="$(jq '.registrations | if type == "array" then length else 0 end' <<<"$state_payload")"
+  if [[ "$cached_registration_count" == 0 ]]; then
+    missing_runtime_registration=true
+  fi
   while IFS= read -r id; do
     [[ -z "$id" ]] && continue
     if ! registration_exists "$id"; then
