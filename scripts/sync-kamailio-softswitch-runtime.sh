@@ -261,7 +261,7 @@ while IFS= read -r item; do
     echo "runtime registration payload requests tls transport, but this Kamailio softswitch runtime has no TLS UAC socket configured" >&2
     exit 1
   fi
-  if [[ -z "$proxy" ]]; then
+  if [[ -z "$proxy" || "$proxy" == "null" ]]; then
     proxy_scheme="sip"
     [[ "$transport" == "tls" ]] && proxy_scheme="sips"
     proxy="${proxy_scheme}:${host}:${port}"
