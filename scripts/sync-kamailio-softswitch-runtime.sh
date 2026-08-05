@@ -55,7 +55,8 @@ http_code="$(fetch_registrations true)"
 if [[ "$http_code" == 304 ]]; then
   missing_runtime_registration=false
   cached_registration_count="$(jq '.registrations | if type == "array" then length else 0 end' <<<"$state_payload")"
-  if [[ "$cached_registration_count" == 0 ]]; then
+  cached_registration_id_count="$(jq '[.registrations[]?.registrationUUID // empty] | length' <<<"$state_payload")"
+  if [[ "$cached_registration_count" == 0 || "$cached_registration_id_count" != "$cached_registration_count" ]]; then
     missing_runtime_registration=true
   fi
   while IFS= read -r id; do
@@ -126,7 +127,7 @@ while IFS= read -r item; do
   fi
   $first_registration || printf ',' >> "$next_state"
   first_registration=false
-  jq -cn --arg registrationUUID "$id" --arg fingerprint "$fingerprint" '{registrationUUID, fingerprint}' >> "$next_state"
+  jq -cn --arg registrationUUID "$id" --arg fingerprint "$fingerprint" '{registrationUUID:$registrationUUID, fingerprint:$fingerprint}' >> "$next_state"
 done < <(jq -c '.data.registrations[]' "$response")
 printf ']}' >> "$next_state"
 install -m 0640 -o root -g root "$next_state" "$STATE_FILE"
