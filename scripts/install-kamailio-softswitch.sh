@@ -494,8 +494,8 @@ listen=tcp:0.0.0.0:5060
 auto_aliases=no
 children=4
 log_stderror=no
-user_agent_header="User-Agent: MNSCloud Kamailio Softswitch"
-server_header="Server: MNSCloud Kamailio Softswitch"
+user_agent_header=\"User-Agent: MNSCloud Kamailio Softswitch\"
+server_header=\"Server: MNSCloud Kamailio Softswitch\"
 
 loadmodule \"tm.so\"
 loadmodule \"sl.so\"
