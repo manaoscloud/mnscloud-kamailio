@@ -122,6 +122,19 @@ register_existing_registration() {
   registration_is_active_or_in_progress "$id"
 }
 
+remove_existing_registration() {
+  local id="$1" remove_output="" command_status=0
+  remove_output="$(kamcmd_call uac.reg_remove "$id" 2>&1)" || command_status=$?
+  if (( command_status != 0 )) && ! grep -Eqi 'not found|no such|does not exist|404' <<<"$remove_output"; then
+    echo "uac.reg_remove failed for cached registration ${id}: $(sanitize_rpc_output <<<"$remove_output")" >&2
+    return 1
+  fi
+  if rpc_output_has_error <<<"$remove_output" && ! grep -Eqi 'not found|no such|does not exist|404' <<<"$remove_output"; then
+    echo "uac.reg_remove returned an error for cached registration ${id}: $(sanitize_rpc_output <<<"$remove_output")" >&2
+    return 1
+  fi
+}
+
 rpc_output_has_error() {
   grep -Eqi '(^|[[:space:]])error:|invalid|failed|not found|no such|does not exist'
 }
@@ -288,6 +301,10 @@ printf ']}' >> "$next_state"
 install -d -m 0750 -o "$uac_owner" -g "$uac_group" "$UAC_DB_TEXT_DIR"
 install -m 0640 -o "$uac_owner" -g "$uac_group" "$next_uacreg" "$UACREG_FILE"
 install -d -m 0750 -o root -g root "$(dirname "$UAC_RELOAD_LOCK_FILE")"
+while IFS= read -r id; do
+  [[ -z "$id" ]] && continue
+  remove_existing_registration "$id"
+done < <(jq -r '.registrations[]?.registrationUUID // empty' "$next_state")
 reload_status=0
 (
   flock -x 9

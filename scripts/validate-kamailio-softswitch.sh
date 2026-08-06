@@ -49,6 +49,8 @@ grep -Fq 'only initialized; it is not enough to skip reg_register' scripts/sync-
 grep -Fq 'managed stderr:' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'registration_diagnostic' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'register_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'remove_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'uac.reg_remove' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'reload_status == 75' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq '"$proxy" == "null"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'auth_password|password|authorization|credential' scripts/sync-kamailio-softswitch-runtime.sh
