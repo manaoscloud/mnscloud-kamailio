@@ -125,6 +125,11 @@ Inbound por trunk/IP também usa `/api/v1/softswitch/runtime/route`, com `direct
 - o DID aponta para assinante registrado ou para destino externo explícito.
 
 Sem esses requisitos, o conector continua fail-closed e não aceita a chamada inbound como trunk.
+O DID utilizado pelo Softswitch é sempre o `VoipDid` canônico do control plane. A publicação
+operacional do Softswitch referencia esse `VoipDid` e mantém apenas um snapshot do número para
+lookup rápido; o Kamailio nunca autoriza um número cadastrado localmente fora do inventário/contrato
+do MNSCloud. Para DID global, a API exige assignment ativo do tenant. Para DID externo, a API exige
+ownership do tenant e `VddValidationStatus=ACTIVE`.
 
 ## Registros de tronco
 
