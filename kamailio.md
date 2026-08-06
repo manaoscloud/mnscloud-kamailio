@@ -112,6 +112,10 @@ REGISTER e INVITE de assinantes são fail-closed: se a API não autorizar ou se 
 requisição é negada. Chamadas locais usam `lookup("location")`; chamadas de saída usam o contrato
 `/api/v1/softswitch/runtime/route`.
 
+O runtime gerado também define a identidade SIP pública do conector: requisições originadas pelo
+Kamailio usam `User-Agent: MNSCloud Kamailio Softswitch` e respostas originadas pelo Kamailio usam
+`Server: MNSCloud Kamailio Softswitch`.
+
 Inbound por trunk/IP também usa `/api/v1/softswitch/runtime/route`, com `direction=inbound`,
 `sourceIP` e DID discado. A API só devolve rota quando:
 

@@ -22,6 +22,8 @@ grep -Fq 'modparam(\"uac\", \"reg_db_url\", \"text://' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_contact_addr\", \"' "$installer"
 grep -Fq 'modparam(\"uac\", \"default_socket\", \"' "$installer"
 grep -Fq 'modparam(\"uac\", \"reg_active\", 1)' "$installer"
+grep -Fq 'user_agent_header="User-Agent: MNSCloud Kamailio Softswitch"' "$installer"
+grep -Fq 'server_header="Server: MNSCloud Kamailio Softswitch"' "$installer"
 grep -Fq 'KAMAILIO_RUNTIME_USER' "$installer"
 grep -Fq "chmod 0640 '" "$installer"
 grep -Fq 'systemctl reset-failed kamailio' "$installer"
@@ -122,6 +124,14 @@ if is_managed_runtime_config "$KAMAILIO_CFG"; then
   }
   grep -Fq 'modparam("uac", "reg_active", 1)' "$KAMAILIO_CFG" || {
     echo "[validate-kamailio-softswitch] deployed config is missing UAC reg_active=1" >&2
+    exit 1
+  }
+  grep -Fq 'user_agent_header="User-Agent: MNSCloud Kamailio Softswitch"' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing MNSCloud User-Agent header" >&2
+    exit 1
+  }
+  grep -Fq 'server_header="Server: MNSCloud Kamailio Softswitch"' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing MNSCloud Server header" >&2
     exit 1
   }
   validate_http_client_calls "$KAMAILIO_CFG" "deployed config"
