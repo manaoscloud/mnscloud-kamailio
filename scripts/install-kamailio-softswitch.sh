@@ -28,6 +28,7 @@ KAMAILIO_RUNTIME_KIT_REPO_URL="${KAMAILIO_RUNTIME_KIT_REPO_URL:-https://github.c
 KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
 KAMAILIO_RUNTIME_KIT_REF="${KAMAILIO_RUNTIME_KIT_REF:-}"
 AGENT_VALIDATOR="/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh"
+AGENT_REPO_INSTALLER="/opt/mnscloud/mnscloud-agent/scripts/install-agent.sh"
 KAMAILIO_PIKE_SAMPLING_TIME_UNIT="${MNSCLOUD_KAMAILIO_PIKE_SAMPLING_TIME_UNIT:-2}"
 KAMAILIO_PIKE_REQUEST_DENSITY="${MNSCLOUD_KAMAILIO_PIKE_REQUEST_DENSITY:-30}"
 KAMAILIO_PIKE_REMOVE_LATENCY="${MNSCLOUD_KAMAILIO_PIKE_REMOVE_LATENCY:-120}"
@@ -40,6 +41,25 @@ validate_mnscloud_agent() {
   [[ -x "${AGENT_VALIDATOR}" ]] ||
     { err "mnscloud-agent validator not found at ${AGENT_VALIDATOR}. Update/reinstall the Agent before installing Kamailio Softswitch."; return 1; }
   bash "${AGENT_VALIDATOR}" --require-active --require-enrolled --require-job voip.softswitch.runtime --require-capability voip.softswitch.manage
+}
+
+refresh_agent_capabilities() {
+  local install_label
+  install_label="$(hostname -f 2>/dev/null || hostname 2>/dev/null || printf 'mnscloud-agent')"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    log DRY "refresh mnscloud-agent capabilities so it publishes mnscloud.kamailio-softswitch.update"
+    return 0
+  fi
+
+  if [[ -x "${AGENT_REPO_INSTALLER}" ]]; then
+    info "Refreshing mnscloud-agent capabilities after Kamailio Softswitch runtime install."
+    bash "${AGENT_REPO_INSTALLER}" --api-base "${API_BASE}" --install-label "${install_label}"
+    return 0
+  fi
+
+  warn "mnscloud-agent source repo not found at ${AGENT_REPO_INSTALLER}; restarting service so runtime capability detection can refresh."
+  run "systemctl restart mnscloud-agent"
 }
 
 normalize_url() {
@@ -897,6 +917,7 @@ main() {
   ensure_uac_contact_addr
   write_kamailio_config
   enable_service
+  refresh_agent_capabilities
   ok "Kamailio installed. Node UUID: ${NODE_UUID}"
 }
 
