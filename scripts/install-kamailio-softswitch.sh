@@ -760,6 +760,23 @@ route[INBOUND_ROUTE] {
     return(1);
   }
 
+  if (\$var(inbound_target_type) == \"trunk\") {
+    if (!jansson_get(\"data.host\", \"\$var(inbound_reply)\", \"\$var(inbound_host)\")) {
+      return(-1);
+    }
+    if (!jansson_get(\"data.port\", \"\$var(inbound_reply)\", \"\$var(inbound_port)\")) {
+      \$var(inbound_port) = \"5060\";
+    }
+    if (!jansson_get(\"data.transport\", \"\$var(inbound_reply)\", \"\$var(inbound_transport)\")) {
+      \$var(inbound_transport) = \"udp\";
+    }
+    \$ru = \"sip:\" + \$var(inbound_destination) + \"@\" + \$var(inbound_host) + \":\" + \$var(inbound_port);
+    if (\$var(inbound_transport) == \"tcp\" || \$var(inbound_transport) == \"tls\") {
+      \$ru = \$ru + \";transport=\" + \$var(inbound_transport);
+    }
+    return(1);
+  }
+
   return(-1);
 }
 
