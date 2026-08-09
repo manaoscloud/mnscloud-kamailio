@@ -250,7 +250,8 @@ See `kamailio.md` and `SECURITY.md` for details.
 - SIP INVITE from subscribers is also proxy-authenticated before local lookup or outbound routing.
 - Local subscriber-to-subscriber calls use Kamailio `usrloc` after authentication.
 - Outbound calls use `/api/v1/softswitch/runtime/route`; the API remains responsible for tenant,
-  policy, ownership, and route selection.
+  policy, ownership, dialplan, trunk-group expansion, and route selection. The Kamailio edge stays
+  realtime/API-first and does not connect to the central MNSCloud database for routing decisions.
 - Inbound trunk calls use `/api/v1/softswitch/runtime/route` with `direction=inbound`, source IP,
   and DID. The API only returns a route when the source IP matches the trunk `trustedCidrs` contract
   and the DID is active.

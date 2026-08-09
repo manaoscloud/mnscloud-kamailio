@@ -112,6 +112,14 @@ REGISTER e INVITE de assinantes são fail-closed: se a API não autorizar ou se 
 requisição é negada. Chamadas locais usam `lookup("location")`; chamadas de saída usam o contrato
 `/api/v1/softswitch/runtime/route`.
 
+O roteamento de operadora é decidido no control plane em tempo real. `VoipSoftswitchDialplan`,
+`VoipSoftswitchDialplanRule`, `VoipSoftswitchRoute`, `VoipSoftswitchTrunkGroup` e
+`VoipSoftswitchTrunkGroupMember` formam o modelo operacional: planos/regras classificam direção e
+perfil de discagem, rotas casam prefixo/pattern, grupos selecionam trunks por prioridade/peso e o
+Kamailio recebe apenas o destino final autorizado pela API. O edge não consulta MariaDB central e
+não decide tenant, billing, ownership ou política sozinho; se a API/runtime não responder, a chamada
+continua fail-closed.
+
 O runtime gerado também define a identidade SIP pública do conector: requisições originadas pelo
 Kamailio usam `User-Agent: MNSCloud Kamailio Softswitch` e respostas originadas pelo Kamailio usam
 `Server: MNSCloud Kamailio Softswitch`.
@@ -145,6 +153,11 @@ nenhuma porta for informada. Esse é um estado interno do Kamailio para remote r
 conexão ao banco central MNSCloud. A origem dos trunks, senhas, autorização, tenant e roteamento
 continua sendo a API/control-plane. Não há polling periódico ou fallback local para essa
 configuração.
+
+Grupos de troncos não registram nada por si só: eles organizam trunks existentes para outbound,
+inbound ou ambos. Quando uma rota aponta para um grupo, a API expande o grupo em candidatos ativos e
+retorna o trunk de menor prioridade/maior peso que satisfaz direção e tenant. Isso permite evoluir
+para round-robin, least-cost e quality routing sem alterar o contrato SIP do edge.
 
 Troncos `ip_acl` não executam REGISTER: eles são identificados exclusivamente pelos IPs/CIDRs
 autorizados durante a decisão inbound da API.
