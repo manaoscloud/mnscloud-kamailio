@@ -34,7 +34,7 @@ result_file="$(mktemp)"
 trap 'rm -f "$result_file"' EXIT
 
 lookup_registration() {
-  local username="$1" domain="$2" username_lower candidate output command_status
+  local username="$1" domain="$2" username_lower candidate output command_status unexpected_output=""
   username_lower="$(tr '[:upper:]' '[:lower:]' <<<"$username")"
   for candidate in \
     "sip:${username}@${domain}" \
@@ -51,10 +51,13 @@ lookup_registration() {
       return 0
     fi
     if (( command_status == 0 )) && ! grep -Eqi 'not found|no such user|404|not registered' <<<"$output"; then
-      printf '%s\n' "$output"
-      return 2
+      unexpected_output="$output"
     fi
   done
+  if [[ -n "$unexpected_output" ]]; then
+    printf '%s\n' "$unexpected_output"
+    return 2
+  fi
   printf '%s\n' "$output"
   return 1
 }
