@@ -52,7 +52,7 @@ lookup_registration() {
     output=""
     command_status=0
     output="$(timeout 5 kamcmd ul.lookup location "$candidate" 2>&1)" || command_status=$?
-    if (( command_status == 0 )) && grep -qi 'Contact::' <<<"$output"; then
+    if (( command_status == 0 )) && grep -Eqi 'Contact::|Contact:|Address:[[:space:]]*sip:' <<<"$output"; then
       printf '%s\n' "$output"
       return 0
     fi
@@ -94,9 +94,9 @@ while IFS= read -r subscriber; do
 
   lookup_output="$(lookup_registration "$username" "$domain")" || lookup_status=$?
   if (( lookup_status == 0 )); then
-    if grep -qi 'Contact::' <<<"$lookup_output"; then
+    if grep -Eqi 'Contact::|Contact:|Address:[[:space:]]*sip:' <<<"$lookup_output"; then
       registration_status="registered"
-      contact="$(sed -n 's/^[[:space:]]*Contact::[[:space:]]*//p' <<<"$lookup_output" | head -n 1)"
+      contact="$(sed -n -E 's/^[[:space:]]*(Contact::|Address:)[[:space:]]*//p' <<<"$lookup_output" | head -n 1)"
     else
       registration_status="not_registered"
     fi
