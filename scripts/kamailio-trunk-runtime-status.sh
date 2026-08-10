@@ -19,12 +19,13 @@ out="$(mktemp)"; trap 'rm -f "$out"' EXIT
 while IFS= read -r trunk; do
   uuid="$(jq -er '.trunkUUID // empty' <<<"$trunk")"; name="$(jq -er '.name // empty' <<<"$trunk")"; mode="$(jq -er '.authenticationMode // empty' <<<"$trunk")"
   [[ "$uuid" =~ ^[A-Za-z0-9-]{1,64}$ && "$name" =~ ^[A-Za-z0-9._-]{1,100}$ && "$mode" =~ ^(register|ip_acl|none)$ ]] || { echo 'Invalid trunk diagnostic target.' >&2; exit 65; }
+  lookup_uuid="${uuid//-/}"
   status='not_applicable'; detail='Registration is not configured.'; runtime_error=''
   if [[ "$mode" == register ]]; then
     # The UAC RPC contract filters by attribute and value. The synchronizer uses
     # the UUID as l_uuid, so this gives an exact, bounded lookup.
     result=''; command_status=0
-    result="$(kamcmd_call uac.reg_info l_uuid "$(rpc_string "$uuid")" 2>&1)" || command_status=$?
+    result="$(kamcmd_call uac.reg_info l_uuid "$(rpc_string "$lookup_uuid")" 2>&1)" || command_status=$?
     entry="$result"
     flag_value="$(sed -n 's/.*flags:[[:space:]]*\([0-9][0-9]*\).*/\1/p' <<<"$entry" | head -n1)"
     if [[ -z "$entry" ]] || grep -Eqi 'not found|no such|does not exist|not registered|record not found|(^|[[:space:]])(error:[[:space:]]*)?404([[:space:]]|$)' <<<"$entry"; then
