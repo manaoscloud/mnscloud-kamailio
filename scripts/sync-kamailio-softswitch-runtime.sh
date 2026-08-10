@@ -235,7 +235,10 @@ fetch_registrations() {
   printf "%s" "$http_code"
 }
 
-http_code="$(fetch_registrations true)"
+# Always fetch the current registration policy. SIP trunk REGISTER state is an
+# edge-control action, not just cached metadata: if Kamailio lost an in-memory
+# UAC record or a previous reload failed, a stale 304 can prevent convergence.
+http_code="$(fetch_registrations false)"
 if [[ "$http_code" == 304 ]]; then
   missing_runtime_registration=false
   cached_registration_count="$(jq '.registrations | if type == "array" then length else 0 end' <<<"$state_payload")"
