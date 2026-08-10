@@ -34,8 +34,15 @@ result_file="$(mktemp)"
 trap 'rm -f "$result_file"' EXIT
 
 lookup_registration() {
-  local username="$1" domain="$2" candidate output command_status
-  for candidate in "sip:${username}@${domain}" "${username}@${domain}" "${username}"; do
+  local username="$1" domain="$2" username_lower candidate output command_status
+  username_lower="$(tr '[:upper:]' '[:lower:]' <<<"$username")"
+  for candidate in \
+    "sip:${username}@${domain}" \
+    "${username}@${domain}" \
+    "${username}" \
+    "sip:${username_lower}@${domain}" \
+    "${username_lower}@${domain}" \
+    "${username_lower}"; do
     output=""
     command_status=0
     output="$(timeout 5 kamcmd ul.lookup location "$candidate" 2>&1)" || command_status=$?
