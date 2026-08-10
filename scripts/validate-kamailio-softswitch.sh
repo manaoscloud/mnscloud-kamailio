@@ -68,7 +68,7 @@ validate_http_client_calls() {
   query_calls="$(grep -Fc 'http_client_query(' "$target" || true)"
   request_calls="$(grep -Fc 'http_client_request(' "$target" || true)"
 
-  if [[ "$query_calls" == "3" && "$request_calls" == "0" ]]; then
+  if [[ "$query_calls" -ge "3" && "$request_calls" == "0" ]]; then
     # The installer heredoc keeps quotes escaped, while the deployed Kamailio
     # configuration contains literal quotes. Validate the same required option
     # in either representation so a healthy runtime is never reported as bad.
@@ -80,16 +80,16 @@ validate_http_client_calls() {
     return 0
   fi
 
-  if [[ "$request_calls" == "3" && "$query_calls" == "0" ]]; then
+  if [[ "$request_calls" -ge "3" && "$query_calls" == "0" ]]; then
     return 0
   fi
 
-  echo "[validate-kamailio-softswitch] ${scope} must use exactly three consistent HTTP runtime calls; found http_client_query=${query_calls}, http_client_request=${request_calls}" >&2
+  echo "[validate-kamailio-softswitch] ${scope} must use consistent HTTP runtime calls; found http_client_query=${query_calls}, http_client_request=${request_calls}" >&2
   exit 1
 }
 
 validate_http_client_calls "$installer" "runtime template"
-for response_var in auth_reply route_reply inbound_reply; do
+for response_var in auth_reply route_reply inbound_reply accounting_reply; do
   grep -Fq "\\\"\\\$var(${response_var})\\\"" "$installer" || {
     echo "[validate-kamailio-softswitch] missing quoted writable response variable for ${response_var}" >&2
     exit 1

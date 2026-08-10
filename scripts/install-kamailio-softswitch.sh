@@ -738,6 +738,12 @@ route[INBOUND_ROUTE] {
   if (!jansson_get(\"data.codecPolicy.rtpengineFlags\", \"\$var(inbound_reply)\", \"\$avp(codec_flags)\")) {
     \$avp(codec_flags) = \"\";
   }
+  jansson_get(\"data.accountUUID\", \"\$var(inbound_reply)\", \"\$avp(account_uuid)\");
+  jansson_get(\"data.subscriberUUID\", \"\$var(inbound_reply)\", \"\$avp(subscriber_uuid)\");
+  jansson_get(\"data.trunkUUID\", \"\$var(inbound_reply)\", \"\$avp(trunk_uuid)\");
+  jansson_get(\"data.routeUUID\", \"\$var(inbound_reply)\", \"\$avp(route_uuid)\");
+  jansson_get(\"data.rateUUID\", \"\$var(inbound_reply)\", \"\$avp(rate_uuid)\");
+  \$avp(direction) = \"inbound\";
 
   if (\$var(inbound_target_type) == \"subscriber\") {
     if (!jansson_get(\"data.domain\", \"\$var(inbound_reply)\", \"\$var(inbound_domain)\")) {
@@ -780,6 +786,41 @@ route[INBOUND_ROUTE] {
   return(-1);
 }
 
+route[ACCOUNTING_EVENT] {
+  if (\$var(accounting_event) == \"\") {
+    \$var(accounting_event) = \"unknown\";
+  }
+  if (\$avp(direction) == \"\") {
+    \$avp(direction) = \"outbound\";
+  }
+  \$var(accounting_url) = \"${API_BASE}/api/v1/softswitch/runtime/accounting?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}\";
+  \$var(accounting_headers) = \"Content-Type: application/json\\r\\nAuthorization: Bearer ${API_TOKEN}\\r\\nX-Softswitch-Engine: ${SOFTSWITCH_ENGINE}\";
+  \$var(accounting_body) = '{}';
+  jansson_set(\"string\", \"engine\", \"${SOFTSWITCH_ENGINE}\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"event\", \"\$var(accounting_event)\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"call_id\", \"\$ci\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"direction\", \"\$avp(direction)\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"caller\", \"\$fU\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"callee\", \"\$rU\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"accountUUID\", \"\$avp(account_uuid)\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"subscriberUUID\", \"\$avp(subscriber_uuid)\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"trunkUUID\", \"\$avp(trunk_uuid)\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"routeUUID\", \"\$avp(route_uuid)\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"rateUUID\", \"\$avp(rate_uuid)\", \"\$var(accounting_body)\");
+  if (\$var(accounting_sip_code) != \"\") {
+    jansson_set(\"integer\", \"sipCode\", \"\$var(accounting_sip_code)\", \"\$var(accounting_body)\");
+  }
+  if (\$var(accounting_sip_reason) != \"\") {
+    jansson_set(\"string\", \"sipReason\", \"\$var(accounting_sip_reason)\", \"\$var(accounting_body)\");
+  }
+  \$var(accounting_reply) = \"\";
+  http_client_query(\$var(accounting_url), \$var(accounting_body), \$var(accounting_headers), \"\$var(accounting_reply)\");
+  \$var(accounting_http_code) = \$rc;
+  if (\$var(accounting_http_code) < 200 || \$var(accounting_http_code) >= 300) {
+    xlog(\"L_WARN\", \"MNSCloud accounting API request failed for call=\$ci event=\$var(accounting_event) http=\$var(accounting_http_code) curl=\$curlerror(error)\\n\");
+  }
+}
+
 ${rtpengine_offer}
 
 request_route {
@@ -798,6 +839,12 @@ request_route {
       exit;
     }
 ${rtpengine_delete}
+    if (is_method(\"BYE\")) {
+      \$var(accounting_event) = \"bye\";
+      \$var(accounting_sip_code) = \"\";
+      \$var(accounting_sip_reason) = \"\";
+      route(ACCOUNTING_EVENT);
+    }
     if (!t_relay()) { sl_reply_error(); }
     exit;
   }
@@ -813,7 +860,18 @@ ${rtpengine_delete}
     if (\$rc > 0) {
       record_route();
       route(MEDIA_OFFER);
-      if (!t_relay()) { sl_reply_error(); }
+      \$var(accounting_event) = \"invite\";
+      \$var(accounting_sip_code) = \"\";
+      \$var(accounting_sip_reason) = \"\";
+      route(ACCOUNTING_EVENT);
+      t_on_reply(\"MNSCLOUD_ACCOUNTING_REPLY\");
+      if (!t_relay()) {
+        \$var(accounting_event) = \"failed\";
+        \$var(accounting_sip_code) = \"500\";
+        \$var(accounting_sip_reason) = \"Relay failed\";
+        route(ACCOUNTING_EVENT);
+        sl_reply_error();
+      }
       exit;
     }
 
@@ -821,19 +879,56 @@ ${rtpengine_delete}
     record_route();
 
     if (lookup(\"location\")) {
+      \$avp(direction) = \"inbound\";
       route(MEDIA_OFFER);
-      if (!t_relay()) { sl_reply_error(); }
+      \$var(accounting_event) = \"invite\";
+      \$var(accounting_sip_code) = \"\";
+      \$var(accounting_sip_reason) = \"\";
+      route(ACCOUNTING_EVENT);
+      t_on_reply(\"MNSCLOUD_ACCOUNTING_REPLY\");
+      if (!t_relay()) {
+        \$var(accounting_event) = \"failed\";
+        \$var(accounting_sip_code) = \"500\";
+        \$var(accounting_sip_reason) = \"Relay failed\";
+        route(ACCOUNTING_EVENT);
+        sl_reply_error();
+      }
       exit;
     }
 
     route(API_ROUTE);
+    \$avp(direction) = \"outbound\";
     route(MEDIA_OFFER);
-    if (!t_relay()) { sl_reply_error(); }
+    \$var(accounting_event) = \"invite\";
+    \$var(accounting_sip_code) = \"\";
+    \$var(accounting_sip_reason) = \"\";
+    route(ACCOUNTING_EVENT);
+    t_on_reply(\"MNSCLOUD_ACCOUNTING_REPLY\");
+    if (!t_relay()) {
+      \$var(accounting_event) = \"failed\";
+      \$var(accounting_sip_code) = \"500\";
+      \$var(accounting_sip_reason) = \"Relay failed\";
+      route(ACCOUNTING_EVENT);
+      sl_reply_error();
+    }
     exit;
   }
 
   sl_send_reply(\"405\", \"Method Not Allowed\");
   exit;
+}
+
+onreply_route[MNSCLOUD_ACCOUNTING_REPLY] {
+  if (\$rs >= 200) {
+    if (\$rs >= 200 && \$rs < 300) {
+      \$var(accounting_event) = \"answered\";
+    } else {
+      \$var(accounting_event) = \"failed\";
+    }
+    \$var(accounting_sip_code) = \$rs;
+    \$var(accounting_sip_reason) = \$rr;
+    route(ACCOUNTING_EVENT);
+  }
 }
 "
   if ! getent group "${cfg_group}" >/dev/null 2>&1; then

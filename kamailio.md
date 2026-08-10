@@ -55,6 +55,26 @@ O `engine` deve ser enviado como `kamailio` via body, query string ou header
 `Authorization: Bearer <token>` no bootstrap e nas consultas runtime, e somente o
 hash fica salvo no banco.
 
+## Histórico de chamadas
+
+O histórico de chamadas do Softswitch é reportado pelo runtime Kamailio via
+`POST /api/v1/softswitch/runtime/accounting`. A engine não grava diretamente no banco e não mantém
+um banco local de CDR: ela envia eventos SIP normalizados para a API/control plane, que valida o
+runtime token, resolve tenant/conta/assinante/tronco/rota e consolida a chamada.
+
+Eventos Kamailio enviados:
+
+- `invite`: chamada aceita para tentativa de roteamento;
+- `answered`: resposta final 2xx recebida;
+- `failed`: resposta final não 2xx ou falha local de relay;
+- `bye`: encerramento de diálogo.
+
+O endpoint runtime grava eventos imutáveis para auditoria e consolida o registro de chamada usado
+pela tela tenant de histórico. Falha de accounting é registrada em log como warning e não derruba
+uma chamada já roteada; autenticação e roteamento continuam fail-closed nos seus próprios endpoints.
+OpenSIPS como engine Softswitch fica reservado/fail-closed até existir runtime Softswitch OpenSIPS
+homologado neste produto.
+
 ## Instalação
 
 Antes de instalar, confirme:
