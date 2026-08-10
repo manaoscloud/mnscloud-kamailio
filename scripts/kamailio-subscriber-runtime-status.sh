@@ -33,6 +33,12 @@ subscriber_count="$(jq -er '.subscribers | if type == "array" then length else e
 result_file="$(mktemp)"
 trap 'rm -f "$result_file"' EXIT
 
+sanitize_runtime_output() {
+  tr '\n' ' ' |
+    sed -E 's/[[:space:]]+/ /g; s/(auth_password|password|authorization|credential):?[[:space:]]*[^[:space:]}]+/\1: [redacted]/Ig' |
+    cut -c1-300
+}
+
 lookup_registration() {
   local username="$1" domain="$2" username_lower candidate output command_status unexpected_output=""
   username_lower="$(tr '[:upper:]' '[:lower:]' <<<"$username")"
@@ -84,6 +90,7 @@ while IFS= read -r subscriber; do
   contact=""
   lookup_output=""
   lookup_status=0
+  runtime_error=""
 
   lookup_output="$(lookup_registration "$username" "$domain")" || lookup_status=$?
   if (( lookup_status == 0 )); then
@@ -96,6 +103,9 @@ while IFS= read -r subscriber; do
   elif grep -Eqi 'not found|no such user|404|not registered' <<<"$lookup_output"; then
     registration_status="not_registered"
   fi
+  if [[ "$registration_status" == "unknown" ]]; then
+    runtime_error="$(sanitize_runtime_output <<<"$lookup_output")"
+  fi
 
   jq -n \
     --arg subscriberUUID "$subscriber_uuid" \
@@ -103,7 +113,8 @@ while IFS= read -r subscriber; do
     --arg domain "$domain" \
     --arg registrationStatus "$registration_status" \
     --arg contact "$contact" \
-    '{subscriberUUID: $subscriberUUID, username: $username, domain: $domain, registrationStatus: $registrationStatus, contact: (if $contact == "" then null else $contact end)}' \
+    --arg runtimeError "$runtime_error" \
+    '{subscriberUUID: $subscriberUUID, username: $username, domain: $domain, registrationStatus: $registrationStatus, contact: (if $contact == "" then null else $contact end), runtimeError: (if $runtimeError == "" then null else $runtimeError end)}' \
     >>"$result_file"
 done < <(jq -c '.subscribers[]' "$input_file")
 
