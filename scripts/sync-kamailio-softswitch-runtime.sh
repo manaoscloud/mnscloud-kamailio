@@ -10,6 +10,7 @@ UACREG_FILE="${UAC_DB_TEXT_DIR}/uacreg"
 UAC_RELOAD_STAMP_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_STAMP_FILE:-/etc/mnscloud/softswitch/runtime/uac-reg-reload.last}"
 UAC_RELOAD_LOCK_FILE="${MNSCLOUD_KAMAILIO_UAC_RELOAD_LOCK_FILE:-/run/mnscloud-softswitch-uac-reload.lock}"
 UAC_RELOAD_MIN_INTERVAL="${MNSCLOUD_KAMAILIO_UAC_RELOAD_MIN_INTERVAL:-155}"
+UAC_RELOAD_MAX_WAIT="${MNSCLOUD_KAMAILIO_UAC_RELOAD_MAX_WAIT:-180}"
 UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
 KAMAILIO_RUNTIME_USER="${MNSCLOUD_KAMAILIO_RUNTIME_USER:-kamailio}"
 KAMAILIO_RUNTIME_GROUP="${MNSCLOUD_KAMAILIO_RUNTIME_GROUP:-kamailio}"
@@ -165,7 +166,18 @@ mark_reload_attempt() {
 }
 
 reload_uac_registrations() {
-  local reload_output recent_log retry_after
+  local reload_output recent_log retry_after waited=false
+  retry_after="$(reload_window_remaining_seconds)"
+  if (( retry_after > 0 )); then
+    if (( retry_after <= UAC_RELOAD_MAX_WAIT )); then
+      echo "uac.reg_reload is inside the Kamailio UAC reload window; waiting ${retry_after}s before retry." >&2
+      sleep "$((retry_after + 1))"
+      waited=true
+    else
+      echo "uac.reg_reload temporarily deferred: Kamailio UAC reload window is still active; retry after ${retry_after}s." >&2
+      return 75
+    fi
+  fi
   retry_after="$(reload_window_remaining_seconds)"
   if (( retry_after > 0 )); then
     echo "uac.reg_reload temporarily deferred: Kamailio UAC reload window is still active; retry after ${retry_after}s." >&2
@@ -173,8 +185,17 @@ reload_uac_registrations() {
   fi
   reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
     if reload_output_is_shift_throttle <<<"$reload_output"; then
+      if [[ "$waited" == false && "$UAC_RELOAD_MIN_INTERVAL" =~ ^[0-9]+$ && "$UAC_RELOAD_MIN_INTERVAL" -le "$UAC_RELOAD_MAX_WAIT" ]]; then
+        echo "uac.reg_reload was throttled by Kamailio; waiting ${UAC_RELOAD_MIN_INTERVAL}s before one retry." >&2
+        sleep "$((UAC_RELOAD_MIN_INTERVAL + 1))"
+        reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
+          echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
+          return 75
+        }
+      else
       echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
       return 75
+      fi
     else
       echo "uac.reg_reload failed: $(sanitize_rpc_output <<<"$reload_output")" >&2
       recent_log="$(recent_kamailio_log)"
@@ -184,8 +205,17 @@ reload_uac_registrations() {
   }
   if rpc_output_has_error <<<"$reload_output"; then
     if reload_output_is_shift_throttle <<<"$reload_output"; then
+      if [[ "$waited" == false && "$UAC_RELOAD_MIN_INTERVAL" =~ ^[0-9]+$ && "$UAC_RELOAD_MIN_INTERVAL" -le "$UAC_RELOAD_MAX_WAIT" ]]; then
+        echo "uac.reg_reload was throttled by Kamailio; waiting ${UAC_RELOAD_MIN_INTERVAL}s before one retry." >&2
+        sleep "$((UAC_RELOAD_MIN_INTERVAL + 1))"
+        reload_output="$(kamcmd_call uac.reg_reload 2>&1)" || {
+          echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
+          return 75
+        }
+      else
       echo "uac.reg_reload temporarily deferred: Kamailio rejected reload because the memory table was shifted recently; retry after ${UAC_RELOAD_MIN_INTERVAL}s." >&2
       return 75
+      fi
     fi
   fi
   if rpc_output_has_error <<<"$reload_output"; then
@@ -234,7 +264,7 @@ jq -e '.status == "success" and (.data.registrations | type == "array")' "$respo
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
   if ! jq -e --arg id "$id" '.data.registrations[] | select(.registrationUUID == $id)' "$response" >/dev/null; then
-    remove_registration "$id"
+    remove_existing_registration "$id"
   fi
 done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload")
 
