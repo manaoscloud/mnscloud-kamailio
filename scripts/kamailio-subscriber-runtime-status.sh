@@ -33,6 +33,25 @@ subscriber_count="$(jq -er '.subscribers | if type == "array" then length else e
 result_file="$(mktemp)"
 trap 'rm -f "$result_file"' EXIT
 
+lookup_registration() {
+  local username="$1" domain="$2" candidate output command_status
+  for candidate in "sip:${username}@${domain}" "${username}@${domain}" "${username}"; do
+    output=""
+    command_status=0
+    output="$(timeout 5 kamcmd ul.lookup location "$candidate" 2>&1)" || command_status=$?
+    if (( command_status == 0 )) && grep -qi 'Contact::' <<<"$output"; then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    if (( command_status == 0 )) && ! grep -Eqi 'not found|no such user|404|not registered' <<<"$output"; then
+      printf '%s\n' "$output"
+      return 2
+    fi
+  done
+  printf '%s\n' "$output"
+  return 1
+}
+
 while IFS= read -r subscriber; do
   subscriber_uuid="$(jq -er '.subscriberUUID // empty' <<<"$subscriber")"
   username="$(jq -er '.username // empty' <<<"$subscriber")"
@@ -51,12 +70,13 @@ while IFS= read -r subscriber; do
     exit 65
   }
 
-  uri="sip:${username}@${domain}"
   registration_status="unknown"
   contact=""
   lookup_output=""
+  lookup_status=0
 
-  if lookup_output="$(timeout 5 kamcmd ul.lookup location "$uri" 2>&1)"; then
+  lookup_output="$(lookup_registration "$username" "$domain")" || lookup_status=$?
+  if (( lookup_status == 0 )); then
     if grep -qi 'Contact::' <<<"$lookup_output"; then
       registration_status="registered"
       contact="$(sed -n 's/^[[:space:]]*Contact::[[:space:]]*//p' <<<"$lookup_output" | head -n 1)"
