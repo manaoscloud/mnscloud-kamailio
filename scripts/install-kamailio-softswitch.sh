@@ -520,6 +520,7 @@ server_header=\"Server: MNSCloud Kamailio Softswitch\"
 loadmodule \"tm.so\"
 loadmodule \"sl.so\"
 loadmodule \"rr.so\"
+loadmodule \"path.so\"
 loadmodule \"maxfwd.so\"
 loadmodule \"textops.so\"
 loadmodule \"siputils.so\"
@@ -541,6 +542,8 @@ ${rtpengine_modules}
 
 modparam(\"usrloc\", \"db_mode\", 0)
 modparam(\"registrar\", \"max_contacts\", 1)
+modparam(\"registrar\", \"use_path\", 1)
+modparam(\"registrar\", \"path_mode\", 0)
 modparam(\"auth\", \"nonce_expire\", 300)
 modparam(\"auth\", \"qop\", \"auth\")
 modparam(\"http_client\", \"query_result\", 0)
