@@ -541,8 +541,8 @@ loadmodule \"uac.so\"
 ${rtpengine_modules}
 
 modparam(\"usrloc\", \"db_mode\", 0)
+modparam(\"usrloc\", \"use_domain\", 1)
 modparam(\"registrar\", \"max_contacts\", 1)
-modparam(\"registrar\", \"use_domain\", 1)
 modparam(\"registrar\", \"use_path\", 1)
 modparam(\"registrar\", \"path_mode\", 0)
 modparam(\"auth\", \"nonce_expire\", 300)
