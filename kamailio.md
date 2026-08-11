@@ -144,11 +144,15 @@ O runtime gerado também define a identidade SIP pública do conector: requisiç
 Kamailio usam `User-Agent: MNSCloud Kamailio Softswitch` e respostas originadas pelo Kamailio usam
 `Server: MNSCloud Kamailio Softswitch`.
 
-Inbound por trunk/IP também usa `/api/v1/softswitch/runtime/route`, com `direction=inbound`,
+Inbound por trunk também usa `/api/v1/softswitch/runtime/route`, com `direction=inbound`,
 `sourceIP` e DID discado. A API só devolve rota quando:
 
-- o trunk vinculado ao softswitch tem `trustedCidrs` preenchido;
-- o `sourceIP` do pacote SIP está dentro de um dos CIDRs/IPs permitidos;
+- o trunk vinculado ao softswitch está ativo, pertence ao tenant/conta do DID e permite
+  `inbound` ou `both`;
+- para trunks `ip_acl`, o trunk tem `trustedCidrs` preenchido e o `sourceIP` do pacote SIP está
+  dentro de um dos CIDRs/IPs permitidos;
+- para trunks `register`, a política inbound do trunk permite entrada por registro
+  (`registered`) ou por registro com ACL de origem (`registered_with_source_acl`);
 - existe DID ativo para o número discado;
 - o DID aponta para assinante registrado ou para destino externo explícito.
 
@@ -173,6 +177,13 @@ nenhuma porta for informada. Esse é um estado interno do Kamailio para remote r
 conexão ao banco central MNSCloud. A origem dos trunks, senhas, autorização, tenant e roteamento
 continua sendo a API/control-plane. Não há polling periódico ou fallback local para essa
 configuração.
+
+Para chamadas entrantes em trunks `register`, o registro UAC não transforma o listener SIP em aberto:
+o runtime ainda consulta a API em tempo real e só aceita a chamada quando o DID e a política inbound
+do trunk autorizam o fluxo. Quando a operadora fornece IPs estáveis, use
+`registered_with_source_acl` e preencha `trustedCidrs`; quando a operadora entrega por rede dinâmica,
+use `registered` de forma explícita e mantenha rate limit, auditoria e validação de DID/tenant
+ativas no edge.
 
 Grupos de troncos não registram nada por si só: eles organizam trunks existentes para outbound,
 inbound ou ambos. Quando uma rota aponta para um grupo, a API expande o grupo em candidatos ativos e

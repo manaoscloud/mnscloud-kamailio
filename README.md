@@ -253,7 +253,8 @@ See `kamailio.md` and `SECURITY.md` for details.
   policy, ownership, dialplan, trunk-group expansion, and route selection. The Kamailio edge stays
   realtime/API-first and does not connect to the central MNSCloud database for routing decisions.
 - Inbound trunk calls use `/api/v1/softswitch/runtime/route` with `direction=inbound`, source IP,
-  and DID. The API only returns a route when the source IP matches the trunk `trustedCidrs` contract
-  and the DID is active.
+  and DID. The API only returns a route when the DID is active and the trunk inbound policy allows
+  the flow: `ip_acl` trunks require a `trustedCidrs` match; `register` trunks require explicit
+  `registered` or `registered_with_source_acl` policy, with CIDR validation for the latter.
 - If the API-selected Softswitch server has a media relay, INVITE dialogs with SDP are anchored via
   `mnscloud-media`/`rtpengine`; otherwise RTP remains outside this connector.
