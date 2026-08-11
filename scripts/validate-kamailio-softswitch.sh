@@ -28,6 +28,8 @@ grep -Fq 'modparam(\"uac\", \"reg_active\", 1)' "$installer"
 grep -Fq 'modparam(\"usrloc\", \"use_domain\", 1)' "$installer"
 grep -Fq 'modparam(\"registrar\", \"use_path\", 1)' "$installer"
 grep -Fq 'modparam(\"registrar\", \"path_mode\", 0)' "$installer"
+grep -Fq 'if (\$tU != \"\")' "$installer"
+grep -Fq 'MNSCloud inbound route lookup source=' "$installer"
 grep -Fq 'user_agent_header=\"User-Agent: MNSCloud Kamailio Softswitch\"' "$installer"
 grep -Fq 'server_header=\"Server: MNSCloud Kamailio Softswitch\"' "$installer"
 grep -Fq 'KAMAILIO_RUNTIME_USER' "$installer"
@@ -130,6 +132,14 @@ if is_managed_runtime_config "$KAMAILIO_CFG"; then
   }
   grep -Fq 'modparam("uac", "reg_active", 1)' "$KAMAILIO_CFG" || {
     echo "[validate-kamailio-softswitch] deployed config is missing UAC reg_active=1" >&2
+    exit 1
+  }
+  grep -Fq 'if ($tU != "")' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing To-user DID inbound fallback" >&2
+    exit 1
+  }
+  grep -Fq 'MNSCloud inbound route lookup source=' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing inbound route diagnostic log" >&2
     exit 1
   }
   grep -Fq 'user_agent_header="User-Agent: MNSCloud Kamailio Softswitch"' "$KAMAILIO_CFG" || {

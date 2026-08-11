@@ -711,7 +711,11 @@ route[API_ROUTE] {
 route[INBOUND_ROUTE] {
   \$var(source_ip) = \$si;
   \$var(request_user) = \$rU;
+  if (\$tU != \"\") {
+    \$var(request_user) = \$tU;
+  }
   \$var(request_domain) = \$rd;
+  xlog(\"L_INFO\", \"MNSCloud inbound route lookup source=\$si request_user=\$rU to_user=\$tU destination=\$var(request_user) domain=\$var(request_domain)\\n\");
   \$var(inbound_url) = \"${API_BASE}/api/v1/softswitch/runtime/route?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}\";
   \$var(inbound_headers) = \"Content-Type: application/json\\r\\nAuthorization: Bearer ${API_TOKEN}\\r\\nX-Softswitch-Engine: ${SOFTSWITCH_ENGINE}\";
   \$var(inbound_body) = '{}';

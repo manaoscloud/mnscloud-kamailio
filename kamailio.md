@@ -148,7 +148,9 @@ Kamailio usam `User-Agent: MNSCloud Kamailio Softswitch` e respostas originadas 
 `Server: MNSCloud Kamailio Softswitch`.
 
 Inbound por trunk também usa `/api/v1/softswitch/runtime/route`, com `direction=inbound`,
-`sourceIP` e DID discado. A API só devolve rota quando:
+`sourceIP` e DID discado. Quando a operadora entrega um identificador técnico no Request-URI
+e o DID real no header `To`, o runtime usa o usuário do `To` como destino inbound; se o `To`
+não trouxer usuário, mantém o usuário do Request-URI. A API só devolve rota quando:
 
 - o trunk vinculado ao softswitch está ativo, pertence ao tenant/conta do DID e permite
   `inbound` ou `both`;
