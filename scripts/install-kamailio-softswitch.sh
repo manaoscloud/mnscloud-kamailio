@@ -581,11 +581,11 @@ route[AUTH_LOOKUP] {
   http_client_query(\$var(auth_url), \$var(auth_body), \$var(auth_headers), \"\$var(auth_reply)\");
   \$var(auth_http_code) = \$rc;
   if (\$var(auth_http_code) == 429) {
-    xlog(\"L_WARN\", \"MNSCloud SIP edge denied engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) reason=rate_limit\\n\");
+    xlog(\"L_WARN\", \"MNSCloud auth API rate limited engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) http=\$var(auth_http_code)\\n\");
     return(-20);
   }
   if (\$var(auth_http_code) < 200 || \$var(auth_http_code) >= 300) {
-    xlog(\"L_ERR\", \"MNSCloud auth API request failed for \$fU@\$fd: http=\$var(auth_http_code) curl=\$curlerror(error)\\n\");
+    xlog(\"L_ERR\", \"MNSCloud auth API request failed engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) http=\$var(auth_http_code) curl=\$curlerror(error)\\n\");
     return(-1);
   }
 
@@ -859,7 +859,12 @@ ${rtpengine_delete}
 
   if (is_method(\"REGISTER\")) {
     route(REGISTER_AUTH);
-    if (!save(\"location\")) { sl_reply_error(); }
+    if (!save(\"location\")) {
+      xlog(\"L_ERR\", \"MNSCloud REGISTER location save failed engine=${SOFTSWITCH_ENGINE} source=\$si username=\$fU domain=\$td contact=\$ct callid=\$ci cseq=\$cs\\n\");
+      sl_send_reply(\"503\", \"Registration Storage Unavailable\");
+      exit;
+    }
+    xlog(\"L_INFO\", \"MNSCloud REGISTER saved engine=${SOFTSWITCH_ENGINE} source=\$si username=\$fU domain=\$td contact=\$ct callid=\$ci cseq=\$cs\\n\");
     exit;
   }
 
