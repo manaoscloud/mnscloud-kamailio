@@ -123,7 +123,8 @@ O instalador:
 - gera um `kamailio.cfg` com autenticação SIP digest para REGISTER e INVITE de assinantes;
 - habilita `rtpengine` no `kamailio.cfg` quando existe media relay selecionado; sem media relay, o
   conector continua atuando somente como sinalização/proxy SIP;
-- salva contatos com `registrar/usrloc` em memória local e preserva o cabeçalho SIP `Path`
+- salva contatos com `registrar/usrloc` em memória local usando AOR com domínio
+  (`subscriber@domain`) para isolamento multitenant, e preserva o cabeçalho SIP `Path`
   recebido do WebRTC edge, permitindo que chamadas para contatos `.invalid;transport=wss` retornem
   pelo proxy WebRTC em vez de tentar resolver o host `.invalid` diretamente;
 - consulta `/route` na API para chamadas de saída quando o destino não está registrado localmente.
