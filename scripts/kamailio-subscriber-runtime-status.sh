@@ -45,10 +45,8 @@ lookup_registration() {
   for candidate in \
     "sip:${username}@${domain}" \
     "${username}@${domain}" \
-    "${username}" \
     "sip:${username_lower}@${domain}" \
-    "${username_lower}@${domain}" \
-    "${username_lower}"; do
+    "${username_lower}@${domain}"; do
     output=""
     command_status=0
     output="$(timeout 5 kamcmd ul.lookup location "$candidate" 2>&1)" || command_status=$?
