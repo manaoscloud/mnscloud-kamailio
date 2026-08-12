@@ -21,6 +21,7 @@ API_TOKEN="${MNSCLOUD_SOFTSWITCH_API_TOKEN:-}"
 MEDIA_SOCKET=""
 UAC_CONTACT_ADDR="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}"
 UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
+KAMAILIO_SIP_LISTEN_IP="${MNSCLOUD_KAMAILIO_SIP_LISTEN_IP:-}"
 KAMAILIO_RUNTIME_USER="${MNSCLOUD_KAMAILIO_RUNTIME_USER:-kamailio}"
 KAMAILIO_RUNTIME_GROUP="${MNSCLOUD_KAMAILIO_RUNTIME_GROUP:-kamailio}"
 KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}"
@@ -348,6 +349,29 @@ private_ipv4() {
   ip -o -4 addr show scope global 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}' || true
 }
 
+validate_ipv4() {
+  [[ "$1" =~ ^([0-9]{1,3}[.]){3}[0-9]{1,3}$ ]] || return 1
+  awk -F. '{ exit !($1 <= 255 && $2 <= 255 && $3 <= 255 && $4 <= 255) }' <<<"$1"
+}
+
+resolve_kamailio_sip_listen_ip() {
+  local candidate
+  if [[ -n "${KAMAILIO_SIP_LISTEN_IP}" ]]; then
+    candidate="${KAMAILIO_SIP_LISTEN_IP}"
+  else
+    candidate="$(private_ipv4)"
+  fi
+  validate_ipv4 "${candidate}" || {
+    err "Nao foi possivel resolver um IPv4 local valido para Kamailio SIP. Defina MNSCLOUD_KAMAILIO_SIP_LISTEN_IP."
+    return 1
+  }
+  if ! ip -o -4 addr show scope global | awk '{split($4,a,"/"); print a[1]}' | grep -qx "${candidate}"; then
+    err "MNSCLOUD_KAMAILIO_SIP_LISTEN_IP=${candidate} nao esta atribuido a este host."
+    return 1
+  fi
+  KAMAILIO_SIP_LISTEN_IP="${candidate}"
+}
+
 public_ipv4() {
   curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null ||
     curl -fsS --max-time 5 https://ifconfig.me/ip 2>/dev/null ||
@@ -458,6 +482,7 @@ write_kamailio_config() {
   local cfg="/etc/kamailio/kamailio.cfg"
   local rtpengine_modules="" rtpengine_params="" rtpengine_offer="" rtpengine_delete=""
   local cfg_group="${KAMAILIO_RUNTIME_GROUP}"
+  resolve_kamailio_sip_listen_ip
   rtpengine_offer='
 route[MEDIA_OFFER] {
   return(1);
@@ -509,8 +534,8 @@ onreply_route[MEDIA_ANSWER] {
   write_file "$cfg" "#!KAMAILIO
 # MNSCloud managed Kamailio Softswitch runtime
 
-listen=udp:0.0.0.0:5060
-listen=tcp:0.0.0.0:5060
+listen=udp:${KAMAILIO_SIP_LISTEN_IP}:5060
+listen=tcp:${KAMAILIO_SIP_LISTEN_IP}:5060
 auto_aliases=no
 children=4
 log_stderror=no
@@ -836,8 +861,16 @@ request_route {
   if (is_method(\"OPTIONS\")) { sl_send_reply(\"200\", \"OK\"); exit; }
 
   # Keep unauthenticated SIP floods from exhausting the authenticated runtime API.
-  if (is_method(\"REGISTER|INVITE\") && !pike_check_req()) {
+  if (is_method(\"REGISTER|INVITE|CANCEL\") && !pike_check_req()) {
     xlog(\"L_WARN\", \"MNSCloud dropped SIP flood: method=\$rm source=\$si\\n\");
+    exit;
+  }
+
+  if (is_method(\"CANCEL\")) {
+    if (t_check_trans()) {
+${rtpengine_delete}
+      if (!t_relay()) { sl_reply_error(); }
+    }
     exit;
   }
 

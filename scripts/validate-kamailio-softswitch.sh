@@ -32,6 +32,13 @@ grep -Fq 'if (\$tU != \"\")' "$installer"
 grep -Fq 'MNSCloud inbound route lookup source=' "$installer"
 grep -Fq 'user_agent_header=\"User-Agent: MNSCloud Kamailio Softswitch\"' "$installer"
 grep -Fq 'server_header=\"Server: MNSCloud Kamailio Softswitch\"' "$installer"
+grep -Fq 'resolve_kamailio_sip_listen_ip' "$installer"
+grep -Fq 'listen=udp:${KAMAILIO_SIP_LISTEN_IP}:5060' "$installer"
+grep -Fq 'listen=tcp:${KAMAILIO_SIP_LISTEN_IP}:5060' "$installer"
+grep -Fq 'if (is_method(\"CANCEL\"))' "$installer"
+grep -Fq 't_check_trans()' "$installer"
+! grep -Fq 'listen=udp:0.0.0.0:5060' "$installer"
+! grep -Fq 'listen=tcp:0.0.0.0:5060' "$installer"
 grep -Fq 'KAMAILIO_RUNTIME_USER' "$installer"
 grep -Fq "chmod 0640 '" "$installer"
 grep -Fq 'systemctl reset-failed kamailio' "$installer"
@@ -148,6 +155,22 @@ if is_managed_runtime_config "$KAMAILIO_CFG"; then
   }
   grep -Fq 'server_header="Server: MNSCloud Kamailio Softswitch"' "$KAMAILIO_CFG" || {
     echo "[validate-kamailio-softswitch] deployed config is missing MNSCloud Server header" >&2
+    exit 1
+  }
+  ! grep -Fq 'listen=udp:0.0.0.0:5060' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config must not advertise 0.0.0.0 for UDP SIP" >&2
+    exit 1
+  }
+  ! grep -Fq 'listen=tcp:0.0.0.0:5060' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config must not advertise 0.0.0.0 for TCP SIP" >&2
+    exit 1
+  }
+  grep -Fq 'if (is_method("CANCEL"))' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing CANCEL transaction handling" >&2
+    exit 1
+  }
+  grep -Fq 't_check_trans()' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config is missing CANCEL t_check_trans handling" >&2
     exit 1
   }
   validate_http_client_calls "$KAMAILIO_CFG" "deployed config"
