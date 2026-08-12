@@ -370,6 +370,11 @@ resolve_kamailio_sip_listen_ip() {
     return 1
   fi
   KAMAILIO_SIP_LISTEN_IP="${candidate}"
+  if [[ "${UAC_DEFAULT_SOCKET}" == "udp:0.0.0.0:5060" ]]; then
+    UAC_DEFAULT_SOCKET="udp:${KAMAILIO_SIP_LISTEN_IP}:5060"
+  elif [[ "${UAC_DEFAULT_SOCKET}" == "tcp:0.0.0.0:5060" ]]; then
+    UAC_DEFAULT_SOCKET="tcp:${KAMAILIO_SIP_LISTEN_IP}:5060"
+  fi
 }
 
 public_ipv4() {
