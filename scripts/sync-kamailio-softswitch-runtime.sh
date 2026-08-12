@@ -19,6 +19,17 @@ CURL_MAX_TIME="${MNSCLOUD_SOFTSWITCH_CURL_MAX_TIME:-30}"
 KAMCMD_TIMEOUT="${MNSCLOUD_SOFTSWITCH_KAMCMD_TIMEOUT:-10}"
 
 read_value() { tr -d '[:space:]' < "$1"; }
+private_ipv4() {
+  ip -o -4 addr show scope global 2>/dev/null | awk '{split($4,a,"/"); print a[1]; exit}' || true
+}
+if [[ "${UAC_DEFAULT_SOCKET}" == "udp:0.0.0.0:5060" || "${UAC_DEFAULT_SOCKET}" == "tcp:0.0.0.0:5060" ]]; then
+  detected_private_ip="$(private_ipv4)"
+  if [[ -z "${detected_private_ip}" ]]; then
+    echo "Could not resolve local IPv4 for default UAC socket." >&2
+    exit 1
+  fi
+  UAC_DEFAULT_SOCKET="${UAC_DEFAULT_SOCKET/0.0.0.0/${detected_private_ip}}"
+fi
 rpc_string() { printf 's:%s' "$1"; }
 dbtext_escape() {
   local value="$1"

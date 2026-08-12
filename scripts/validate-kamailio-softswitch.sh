@@ -35,6 +35,7 @@ grep -Fq 'server_header=\"Server: MNSCloud Kamailio Softswitch\"' "$installer"
 grep -Fq 'resolve_kamailio_sip_listen_ip' "$installer"
 grep -Fq 'listen=udp:${KAMAILIO_SIP_LISTEN_IP}:5060' "$installer"
 grep -Fq 'listen=tcp:${KAMAILIO_SIP_LISTEN_IP}:5060' "$installer"
+grep -Fq 'UAC_DEFAULT_SOCKET="udp:${KAMAILIO_SIP_LISTEN_IP}:5060"' "$installer"
 grep -Fq 'if (is_method(\"CANCEL\"))' "$installer"
 grep -Fq 't_check_trans()' "$installer"
 ! grep -Fq 'listen=udp:0.0.0.0:5060' "$installer"
@@ -76,6 +77,8 @@ grep -Fq 'temporarily deferred' scripts/sync-kamailio-softswitch-runtime.sh
 ! grep -Fq 'sleep "$UAC_RELOAD_MIN_INTERVAL"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'if (!(\$var(auth_authorized) =~ \"^(true|1)$\"))' "$installer"
 grep -Fq 'UAC_DEFAULT_SOCKET' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'private_ipv4()' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'UAC_DEFAULT_SOCKET="${UAC_DEFAULT_SOCKET/0.0.0.0/${detected_private_ip}}"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'KAMAILIO_RUNTIME_USER' scripts/sync-kamailio-softswitch-runtime.sh
 
 validate_http_client_calls() {
@@ -171,6 +174,10 @@ if is_managed_runtime_config "$KAMAILIO_CFG"; then
   }
   grep -Fq 't_check_trans()' "$KAMAILIO_CFG" || {
     echo "[validate-kamailio-softswitch] deployed config is missing CANCEL t_check_trans handling" >&2
+    exit 1
+  }
+  ! grep -Fq 'modparam("uac", "default_socket", "udp:0.0.0.0:5060")' "$KAMAILIO_CFG" || {
+    echo "[validate-kamailio-softswitch] deployed config must not use 0.0.0.0 as UAC default_socket" >&2
     exit 1
   }
   validate_http_client_calls "$KAMAILIO_CFG" "deployed config"
