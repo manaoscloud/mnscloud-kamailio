@@ -100,6 +100,53 @@ sanitize_runtime_log() {
     | cut -c1-2000
 }
 
+normalize_registration_id() {
+  tr -d '-' | tr '[:lower:]' '[:upper:]'
+}
+
+runtime_response_has_registration_id() {
+  local id
+  id="$(normalize_registration_id <<<"$1")"
+  jq -e --arg id "$id" '
+    .data.registrations[]?
+    | (.registrationUUID // "" | gsub("-"; "") | ascii_upcase) == $id
+  ' "$response" >/dev/null
+}
+
+dump_runtime_registration_ids() {
+  local dump_output="" command_status=0
+  dump_output="$(kamcmd_call uac.reg_dump 2>&1)" || command_status=$?
+  if (( command_status != 0 )) && ! grep -Eqi 'not found|no such|does not exist|404|empty|no records' <<<"$dump_output"; then
+    echo "uac.reg_dump failed; orphaned registration purge skipped: $(sanitize_rpc_output <<<"$dump_output")" >&2
+    return 0
+  fi
+  if rpc_output_has_error <<<"$dump_output" && ! grep -Eqi 'not found|no such|does not exist|404|empty|no records' <<<"$dump_output"; then
+    echo "uac.reg_dump returned an error; orphaned registration purge skipped: $(sanitize_rpc_output <<<"$dump_output")" >&2
+    return 0
+  fi
+  sed -nE \
+    -e 's/.*"l_uuid"[[:space:]]*:[[:space:]]*"s?:?([^"]+)".*/\1/p' \
+    -e 's/.*(^|[[:space:]])l_uuid[[:space:]]*[:=]+[[:space:]]*s?:?([A-Za-z0-9._-]+).*/\2/p' \
+    <<<"$dump_output" |
+    normalize_registration_id |
+    awk 'NF && !seen[$0]++'
+}
+
+purge_orphaned_runtime_registrations() {
+  local id="" purged_count=0
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    if ! runtime_response_has_registration_id "$id"; then
+      echo "Removing orphaned Kamailio UAC registration ${id} not present in runtime policy." >&2
+      remove_existing_registration "$id"
+      purged_count=$((purged_count + 1))
+    fi
+  done < <(dump_runtime_registration_ids)
+  if (( purged_count > 0 )); then
+    echo "Purged ${purged_count} orphaned Kamailio UAC registration(s) from runtime memory." >&2
+  fi
+}
+
 recent_kamailio_log() {
   local printed=false
   if [[ -r /var/log/mnscloud/kamailio/kamailio.err.log ]]; then
@@ -277,10 +324,11 @@ jq -e '.status == "success" and (.data.registrations | type == "array")' "$respo
 
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
-  if ! jq -e --arg id "$id" '.data.registrations[] | select(.registrationUUID == $id)' "$response" >/dev/null; then
+  if ! runtime_response_has_registration_id "$id"; then
     remove_existing_registration "$id"
   fi
 done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload")
+purge_orphaned_runtime_registrations
 
 next_state="$(mktemp)"
 next_uacreg="$(mktemp)"

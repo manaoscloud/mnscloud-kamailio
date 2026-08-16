@@ -69,6 +69,11 @@ grep -Fq 'registration_diagnostic' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'register_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'remove_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'uac.reg_remove' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'dump_runtime_registration_ids' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'uac.reg_dump' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'purge_orphaned_runtime_registrations' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'not present in runtime policy' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'runtime_response_has_registration_id' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'reload_status == 75' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq '"$proxy" == "null"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'auth_password|password|authorization|credential' scripts/sync-kamailio-softswitch-runtime.sh
