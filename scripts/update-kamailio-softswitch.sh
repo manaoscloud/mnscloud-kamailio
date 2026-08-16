@@ -104,5 +104,5 @@ git rev-parse --verify --quiet "${REF}^{commit}" >/dev/null || {
 restore_managed_lifecycle_scripts
 git -c advice.detachedHead=false checkout "$REF"
 
-bash "${SCRIPT_DIR}/install-kamailio-softswitch.sh" "${ARGS[@]}"
+MNSCLOUD_SKIP_AGENT_REFRESH=true bash "${SCRIPT_DIR}/install-kamailio-softswitch.sh" "${ARGS[@]}"
 bash "${SCRIPT_DIR}/validate-kamailio-softswitch.sh"

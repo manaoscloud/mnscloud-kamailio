@@ -30,6 +30,7 @@ KAMAILIO_RUNTIME_KIT_CHANNEL="${KAMAILIO_RUNTIME_KIT_CHANNEL:-stable}"
 KAMAILIO_RUNTIME_KIT_REF="${KAMAILIO_RUNTIME_KIT_REF:-}"
 AGENT_VALIDATOR="/opt/mnscloud/mnscloud-agent/scripts/validate-agent.sh"
 AGENT_REPO_INSTALLER="/opt/mnscloud/mnscloud-agent/scripts/install-agent.sh"
+SKIP_AGENT_REFRESH="${MNSCLOUD_SKIP_AGENT_REFRESH:-false}"
 KAMAILIO_PIKE_SAMPLING_TIME_UNIT="${MNSCLOUD_KAMAILIO_PIKE_SAMPLING_TIME_UNIT:-2}"
 KAMAILIO_PIKE_REQUEST_DENSITY="${MNSCLOUD_KAMAILIO_PIKE_REQUEST_DENSITY:-30}"
 KAMAILIO_PIKE_REMOVE_LATENCY="${MNSCLOUD_KAMAILIO_PIKE_REMOVE_LATENCY:-120}"
@@ -47,6 +48,11 @@ validate_mnscloud_agent() {
 refresh_agent_capabilities() {
   local install_label
   install_label="$(hostname -f 2>/dev/null || hostname 2>/dev/null || printf 'mnscloud-agent')"
+
+  if [[ "$SKIP_AGENT_REFRESH" == true || "$SKIP_AGENT_REFRESH" == "1" ]]; then
+    info "Skipping mnscloud-agent capability refresh for this lifecycle run."
+    return 0
+  fi
 
   if [[ "$DRY_RUN" == true ]]; then
     log DRY "refresh mnscloud-agent capabilities so it publishes mnscloud.kamailio-softswitch.update"
