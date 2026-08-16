@@ -138,7 +138,7 @@ purge_orphaned_runtime_registrations() {
     [[ -z "$id" ]] && continue
     if ! runtime_response_has_registration_id "$id"; then
       echo "Removing orphaned Kamailio UAC registration ${id} not present in runtime policy." >&2
-      remove_existing_registration "$id"
+      deactivate_existing_registration "$id"
       purged_count=$((purged_count + 1))
     fi
   done < <(dump_runtime_registration_ids)
@@ -192,6 +192,29 @@ remove_existing_registration() {
     echo "uac.reg_remove returned an error for cached registration ${id}: $(sanitize_rpc_output <<<"$remove_output")" >&2
     return 1
   fi
+}
+
+unregister_existing_registration() {
+  local id="$1" unregister_output="" command_status=0
+  unregister_output="$(kamcmd_call uac.reg_unregister l_uuid "$(rpc_string "$id")" 2>&1)" || command_status=$?
+  if (( command_status != 0 )); then
+    if grep -Eqi 'unknown command|command not found|not found|no such|does not exist|404' <<<"$unregister_output"; then
+      echo "uac.reg_unregister is unavailable or registration ${id} was not found; continuing with local removal: $(sanitize_rpc_output <<<"$unregister_output")" >&2
+      return 0
+    fi
+    echo "uac.reg_unregister failed for registration ${id}: $(sanitize_rpc_output <<<"$unregister_output")" >&2
+    return 1
+  fi
+  if rpc_output_has_error <<<"$unregister_output" && ! grep -Eqi 'not found|no such|does not exist|404' <<<"$unregister_output"; then
+    echo "uac.reg_unregister returned an error for registration ${id}: $(sanitize_rpc_output <<<"$unregister_output")" >&2
+    return 1
+  fi
+}
+
+deactivate_existing_registration() {
+  local id="$1"
+  unregister_existing_registration "$id"
+  remove_existing_registration "$id"
 }
 
 rpc_output_has_error() {
@@ -325,7 +348,7 @@ jq -e '.status == "success" and (.data.registrations | type == "array")' "$respo
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue
   if ! runtime_response_has_registration_id "$id"; then
-    remove_existing_registration "$id"
+    deactivate_existing_registration "$id"
   fi
 done < <(jq -r '.registrations[]?.registrationUUID // empty' <<<"$state_payload")
 purge_orphaned_runtime_registrations

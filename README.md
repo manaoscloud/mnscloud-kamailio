@@ -72,11 +72,13 @@ The enrolled Agent receives a typed `voip.softswitch.runtime` job and runs
 `scripts/sync-kamailio-softswitch-runtime.sh`, which fetches `/runtime/registrations` and applies
 only the current delta to Kamailio.
 
-Disabling or deleting a register-authenticated trunk must converge the live Kamailio UAC table back
-to the API policy. The sync script therefore removes registrations that disappeared from the local
-runtime state file and also compares the API response with `kamcmd uac.reg_dump` to purge orphaned
-in-memory registrations. This prevents a deleted trunk from remaining registered after cache loss,
-service restarts, failed reloads, or older state-file drift.
+Disabling or deleting a register-authenticated trunk must converge the live Kamailio UAC table and
+the upstream operator registration back to the API policy. The sync script therefore sends
+`kamcmd uac.reg_unregister l_uuid <id>` before local removal when a registration disappears from the
+runtime policy, removes registrations that disappeared from the local runtime state file, and also
+compares the API response with `kamcmd uac.reg_dump` to purge orphaned in-memory registrations. This
+prevents a deleted trunk from being renewed after cache loss, service restarts, failed reloads, or
+older state-file drift.
 
 Kamailio's official UAC remote-registration feature requires `reg_db_url` and `reg_contact_addr`
 before it exposes and runs the `uac.reg_*` RPC flow. The installer therefore creates a minimal local

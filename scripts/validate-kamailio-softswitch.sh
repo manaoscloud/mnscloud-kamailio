@@ -72,6 +72,9 @@ grep -Fq 'registration_diagnostic' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'register_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'remove_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'uac.reg_remove' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'unregister_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'deactivate_existing_registration' scripts/sync-kamailio-softswitch-runtime.sh
+grep -Fq 'uac.reg_unregister' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'dump_runtime_registration_ids' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'uac.reg_dump' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'purge_orphaned_runtime_registrations' scripts/sync-kamailio-softswitch-runtime.sh
