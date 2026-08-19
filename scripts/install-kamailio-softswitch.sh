@@ -903,7 +903,7 @@ ${rtpengine_delete}
 
   if (is_method(\"REGISTER\")) {
     route(REGISTER_AUTH);
-    if (!save(\"location\")) {
+    if (!save(\"location\", \"0x04\")) {
       xlog(\"L_ERR\", \"MNSCloud REGISTER location save failed engine=${SOFTSWITCH_ENGINE} source=\$si username=\$fU domain=\$td contact=\$ct callid=\$ci cseq=\$cs\\n\");
       sl_send_reply(\"503\", \"Registration Storage Unavailable\");
       exit;

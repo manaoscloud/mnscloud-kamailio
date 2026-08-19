@@ -246,6 +246,9 @@ See `kamailio.md` and `SECURITY.md` for details.
   arbitrary codec or RTP-engine rule from the server filesystem.
 - SIP REGISTER is authorized by the MNSCloud runtime API and then validated with real SIP digest
   authentication before the contact is saved locally.
+- Subscriber contacts are saved with replacement for the same AOR. This keeps WebRTC/PWA clients
+  usable when a browser is closed before it can send unregister: the next REGISTER replaces the
+  stale contact instead of waiting for the old contact expiration window.
 - Unauthenticated `REGISTER` and `INVITE` bursts are dropped locally by Kamailio `pike` before
   any runtime API callback. Defaults are a 2-second sampling window, density 30, and 120-second
   cleanup; tune only through `MNSCLOUD_KAMAILIO_PIKE_*` environment variables when a measured

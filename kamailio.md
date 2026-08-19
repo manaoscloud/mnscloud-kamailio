@@ -127,6 +127,9 @@ O instalador:
   (`subscriber@domain`) para isolamento multitenant, e preserva o cabeçalho SIP `Path`
   recebido do WebRTC edge, permitindo que chamadas para contatos `.invalid;transport=wss` retornem
   pelo proxy WebRTC em vez de tentar resolver o host `.invalid` diretamente;
+- substitui contatos antigos do mesmo AOR durante novo REGISTER (`save("location", "0x04")`),
+  porque browsers/PWAs podem ser encerrados sem conseguir enviar unregister; isso evita que um
+  contato WebRTC antigo ocupe o único slot do assinante até expirar;
 - consulta `/route` na API para chamadas de saída quando o destino não está registrado localmente.
 - grava o Bearer token local no `kamailio.cfg` para autenticar as chamadas runtime contra a API.
 
