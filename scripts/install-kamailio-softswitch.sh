@@ -789,6 +789,7 @@ route[INBOUND_ROUTE] {
   if (!jansson_get(\"data.destination\", \"\$var(inbound_reply)\", \"\$var(inbound_destination)\")) {
     return(-1);
   }
+  \$avp(callee_number) = \$var(inbound_destination);
   if (!jansson_get(\"data.codecPolicy.rtpengineFlags\", \"\$var(inbound_reply)\", \"\$avp(codec_flags)\")) {
     \$avp(codec_flags) = \"\";
   }
@@ -864,7 +865,11 @@ route[ACCOUNTING_EVENT] {
   jansson_set(\"string\", \"call_id\", \"\$ci\", \"\$var(accounting_body)\");
   jansson_set(\"string\", \"direction\", \"\$avp(direction)\", \"\$var(accounting_body)\");
   jansson_set(\"string\", \"caller\", \"\$fU\", \"\$var(accounting_body)\");
-  jansson_set(\"string\", \"callee\", \"\$rU\", \"\$var(accounting_body)\");
+  if (\$avp(callee_number) != \"\") {
+    jansson_set(\"string\", \"callee\", \"\$avp(callee_number)\", \"\$var(accounting_body)\");
+  } else {
+    jansson_set(\"string\", \"callee\", \"\$rU\", \"\$var(accounting_body)\");
+  }
   jansson_set(\"string\", \"accountUUID\", \"\$avp(account_uuid)\", \"\$var(accounting_body)\");
   jansson_set(\"string\", \"subscriberUUID\", \"\$avp(subscriber_uuid)\", \"\$var(accounting_body)\");
   jansson_set(\"string\", \"trunkUUID\", \"\$avp(trunk_uuid)\", \"\$var(accounting_body)\");
@@ -915,6 +920,7 @@ ${rtpengine_delete}
 
   if (has_totag()) {
     if (!loose_route()) {
+      xlog(\"L_WARN\", \"MNSCloud in-dialog without Route engine=kamailio method=\$rm call=\$ci ruri=\$ru from=\$fu to=\$tu source=\$si\\n\");
       sl_send_reply(\"404\", \"Not Here\");
       exit;
     }
