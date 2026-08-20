@@ -493,7 +493,23 @@ write_kamailio_config() {
   local cfg="/etc/kamailio/kamailio.cfg"
   local rtpengine_modules="" rtpengine_params="" rtpengine_offer="" rtpengine_delete=""
   local cfg_group="${KAMAILIO_RUNTIME_GROUP}"
+  local private_ip="" public_ip="" record_route_block=""
   resolve_kamailio_sip_listen_ip
+  private_ip="${KAMAILIO_SIP_LISTEN_IP}"
+  public_ip="$(public_ipv4)"
+  if [[ -n "${public_ip}" && "${public_ip}" != "${private_ip}" ]]; then
+    record_route_block="$(cat <<EOF
+      if (\$si =~ "^(10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|192\\.168\\.)") {
+        record_route_preset("${public_ip}:5060", "${private_ip}:5060");
+      } else {
+        record_route_preset("${private_ip}:5060", "${public_ip}:5060");
+      }
+      add_rr_param(";r2=on");
+EOF
+)"
+  else
+    record_route_block="      record_route();"
+  fi
   rtpengine_offer='
 route[MEDIA_OFFER] {
   return(1);
@@ -951,6 +967,9 @@ ${rtpengine_delete}
       \$var(accounting_sip_reason) = \"\";
       route(ACCOUNTING_EVENT);
     }
+    if (is_method(\"BYE\")) {
+      xlog(\"L_INFO\", \"MNSCloud in-dialog BYE loose_route engine=${SOFTSWITCH_ENGINE} call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
+    }
     if (!t_relay()) { sl_reply_error(); }
     exit;
   }
@@ -969,7 +988,7 @@ ${rtpengine_delete}
   if (is_method(\"INVITE\")) {
     route(INBOUND_ROUTE);
     if (\$rc > 0) {
-      record_route();
+${record_route_block}
       route(MEDIA_OFFER);
       \$var(accounting_event) = \"invite\";
       \$var(accounting_sip_code) = \"\";
@@ -987,7 +1006,7 @@ ${rtpengine_delete}
     }
 
     route(PROXY_AUTH);
-    record_route();
+${record_route_block}
 
     if (lookup(\"location\")) {
       \$avp(direction) = \"inbound\";
