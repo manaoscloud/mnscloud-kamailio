@@ -889,11 +889,13 @@ route[ACCOUNTING_EVENT] {
   } else if (\$var(accounting_event) == \"invite\" &&
              (\$avp(diag_enabled) == 1 || \$avp(diag_enabled) == \"1\" || \$avp(diag_enabled) == \"true\")) {
     \$var(cdr_uuid) = \"\";
-    if (jansson_get(\"data.callUUID\", \"\$var(accounting_reply)\", \"\$var(cdr_uuid)\") &&
-        \$var(cdr_uuid) =~ \"^[0-9A-Fa-f-]{36}$\") {
+    if (!jansson_get(\"data.cdrUUID\", \"\$var(accounting_reply)\", \"\$var(cdr_uuid)\")) {
+      jansson_get(\"data.callUUID\", \"\$var(accounting_reply)\", \"\$var(cdr_uuid)\");
+    }
+    if (\$var(cdr_uuid) =~ \"^[0-9A-Fa-f-]{36}$\") {
       if (!(\$avp(diag_mode) =~ \"^(sip_capture|pcapng)$\")) { \$avp(diag_mode) = \"sip_capture\"; }
       if (!(\$avp(diag_seconds) =~ \"^[0-9]+$\")) { \$avp(diag_seconds) = \"60\"; }
-      exec_msg(\"/bin/sh -c 'MNSCLOUD_API_BASE=\\\"${API_BASE}\\\" MNSCLOUD_API_TOKEN=\\\"${API_TOKEN}\\\" MNSCLOUD_NODE_UUID=\\\"${NODE_UUID}\\\" /opt/mnscloud/mnscloud-kamailio-softswitch/scripts/mnscloud-cdr-diagnostic-capture.sh --enabled yes --module softswitch --engine ${SOFTSWITCH_ENGINE} --resource-type softswitch_cdr --resource-uuid \\\"\$var(cdr_uuid)\\\" --call-id \\\"\\\" --mode \\\"\$avp(diag_mode)\\\" --duration \\\"\$avp(diag_seconds)\\\" --filter \\\"port 5060\\\" >>${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log 2>&1 &' \");
+      exec_msg(\"/bin/sh -c 'MNSCLOUD_API_BASE=\\\"${API_BASE}\\\" MNSCLOUD_API_TOKEN=\\\"${API_TOKEN}\\\" MNSCLOUD_NODE_UUID=\\\"${NODE_UUID}\\\" /opt/mnscloud/mnscloud-kamailio-softswitch/scripts/mnscloud-cdr-diagnostic-capture.sh --enabled yes --module softswitch --engine ${SOFTSWITCH_ENGINE} --resource-type softswitch_cdr --resource-uuid \\\"\$var(cdr_uuid)\\\" --call-id \\\"\$ci\\\" --mode \\\"\$avp(diag_mode)\\\" --duration \\\"\$avp(diag_seconds)\\\" --filter \\\"port 5060\\\" >>${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log 2>&1 &' \");
     }
   }
 }
@@ -921,6 +923,24 @@ ${rtpengine_delete}
   if (has_totag()) {
     if (!loose_route()) {
       xlog(\"L_WARN\", \"MNSCloud in-dialog without Route engine=kamailio method=\$rm call=\$ci ruri=\$ru from=\$fu to=\$tu source=\$si\\n\");
+      if (is_method(\"ACK|BYE\") && route(INBOUND_ROUTE)) {
+        xlog(\"L_WARN\", \"MNSCloud in-dialog fallback routed engine=kamailio method=\$rm call=\$ci ruri=\$ru source=\$si\\n\");
+        if (is_method(\"BYE\")) {
+          \$var(accounting_event) = \"bye\";
+          \$var(accounting_sip_code) = \"\";
+          \$var(accounting_sip_reason) = \"\";
+          route(ACCOUNTING_EVENT);
+${rtpengine_delete}
+        }
+        if (!t_relay()) {
+          if (!is_method(\"ACK\")) { sl_reply_error(); }
+        }
+        exit;
+      }
+      if (is_method(\"ACK\") && t_check_trans()) {
+        t_relay();
+        exit;
+      }
       sl_send_reply(\"404\", \"Not Here\");
       exit;
     }
