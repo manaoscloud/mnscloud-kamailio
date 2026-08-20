@@ -574,6 +574,7 @@ loadmodule \"db_text.so\"
 loadmodule \"http_client.so\"
 loadmodule \"jansson.so\"
 loadmodule \"uac.so\"
+loadmodule \"exec.so\"
 ${rtpengine_modules}
 
 modparam(\"usrloc\", \"db_mode\", 0)
@@ -738,6 +739,15 @@ route[API_ROUTE] {
   if (!jansson_get(\"data.codecPolicy.rtpengineFlags\", \"\$var(route_reply)\", \"\$avp(codec_flags)\")) {
     \$avp(codec_flags) = \"\";
   }
+  if (!jansson_get(\"data.codecPolicy.diagnosticCaptureEnabled\", \"\$var(route_reply)\", \"\$avp(diag_enabled)\")) {
+    \$avp(diag_enabled) = \"0\";
+  }
+  if (!jansson_get(\"data.codecPolicy.diagnosticCaptureMode\", \"\$var(route_reply)\", \"\$avp(diag_mode)\")) {
+    \$avp(diag_mode) = \"sip_capture\";
+  }
+  if (!jansson_get(\"data.codecPolicy.diagnosticCaptureSeconds\", \"\$var(route_reply)\", \"\$avp(diag_seconds)\")) {
+    \$avp(diag_seconds) = \"60\";
+  }
 
   \$ru = \"sip:\" + \$var(route_destination) + \"@\" + \$var(route_host) + \":\" + \$var(route_port);
   \$du = \"sip:\" + \$var(route_host) + \":\" + \$var(route_port) + \";transport=\" + \$var(route_transport);
@@ -781,6 +791,15 @@ route[INBOUND_ROUTE] {
   }
   if (!jansson_get(\"data.codecPolicy.rtpengineFlags\", \"\$var(inbound_reply)\", \"\$avp(codec_flags)\")) {
     \$avp(codec_flags) = \"\";
+  }
+  if (!jansson_get(\"data.codecPolicy.diagnosticCaptureEnabled\", \"\$var(inbound_reply)\", \"\$avp(diag_enabled)\")) {
+    \$avp(diag_enabled) = \"0\";
+  }
+  if (!jansson_get(\"data.codecPolicy.diagnosticCaptureMode\", \"\$var(inbound_reply)\", \"\$avp(diag_mode)\")) {
+    \$avp(diag_mode) = \"sip_capture\";
+  }
+  if (!jansson_get(\"data.codecPolicy.diagnosticCaptureSeconds\", \"\$var(inbound_reply)\", \"\$avp(diag_seconds)\")) {
+    \$avp(diag_seconds) = \"60\";
   }
   jansson_get(\"data.accountUUID\", \"\$var(inbound_reply)\", \"\$avp(account_uuid)\");
   jansson_get(\"data.subscriberUUID\", \"\$var(inbound_reply)\", \"\$avp(subscriber_uuid)\");
@@ -862,6 +881,15 @@ route[ACCOUNTING_EVENT] {
   \$var(accounting_http_code) = \$rc;
   if (\$var(accounting_http_code) < 200 || \$var(accounting_http_code) >= 300) {
     xlog(\"L_WARN\", \"MNSCloud accounting API request failed for call=\$ci event=\$var(accounting_event) http=\$var(accounting_http_code) curl=\$curlerror(error)\\n\");
+  } else if (\$var(accounting_event) == \"invite\" &&
+             (\$avp(diag_enabled) == 1 || \$avp(diag_enabled) == \"1\" || \$avp(diag_enabled) == \"true\")) {
+    \$var(cdr_uuid) = \"\";
+    if (jansson_get(\"data.callUUID\", \"\$var(accounting_reply)\", \"\$var(cdr_uuid)\") &&
+        \$var(cdr_uuid) =~ \"^[0-9A-Fa-f-]{36}$\") {
+      if (!(\$avp(diag_mode) =~ \"^(sip_capture|pcapng)$\")) { \$avp(diag_mode) = \"sip_capture\"; }
+      if (!(\$avp(diag_seconds) =~ \"^[0-9]+$\")) { \$avp(diag_seconds) = \"60\"; }
+      exec_msg(\"/bin/sh -c 'MNSCLOUD_API_BASE=\\\"${API_BASE}\\\" MNSCLOUD_API_TOKEN=\\\"${API_TOKEN}\\\" MNSCLOUD_NODE_UUID=\\\"${NODE_UUID}\\\" /opt/mnscloud/mnscloud-kamailio-softswitch/scripts/mnscloud-cdr-diagnostic-capture.sh --enabled yes --module softswitch --engine ${SOFTSWITCH_ENGINE} --resource-type softswitch_cdr --resource-uuid \\\"\$var(cdr_uuid)\\\" --call-id \\\"\\\" --mode \\\"\$avp(diag_mode)\\\" --duration \\\"\$avp(diag_seconds)\\\" --filter \\\"port 5060\\\" >>${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log 2>&1 &' \");
+    }
   }
 }
 
@@ -1005,6 +1033,9 @@ install_systemd_override() {
   fi
   install -d -m 0755 "${override_dir}"
   install -d -m 0750 -o root -g "${KAMAILIO_RUNTIME_GROUP}" "${KAMAILIO_LOG_DIR}"
+  touch "${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log"
+  chown root:"${KAMAILIO_RUNTIME_GROUP}" "${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log" 2>/dev/null || chown root:root "${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log"
+  chmod 0660 "${KAMAILIO_LOG_DIR}/cdr-diagnostic-capture.log"
   cat >"${override_file}" <<'EOF_SYSTEMD_OVERRIDE'
 [Service]
 Type=simple
