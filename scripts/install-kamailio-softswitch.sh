@@ -866,6 +866,47 @@ route[INBOUND_ROUTE] {
   return(-1);
 }
 
+route[DIALOG_ROUTE] {
+  \$var(dialog_url) = \"${API_BASE}/api/v1/softswitch/runtime/dialog?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}\";
+  \$var(dialog_headers) = \"Content-Type: application/json\\r\\nAuthorization: Bearer ${API_TOKEN}\\r\\nX-Softswitch-Engine: ${SOFTSWITCH_ENGINE}\";
+  \$var(dialog_body) = '{}';
+  jansson_set(\"string\", \"engine\", \"${SOFTSWITCH_ENGINE}\", \"\$var(dialog_body)\");
+  jansson_set(\"string\", \"call_id\", \"\$ci\", \"\$var(dialog_body)\");
+  jansson_set(\"string\", \"sourceIP\", \"\$si\", \"\$var(dialog_body)\");
+  jansson_set(\"integer\", \"sourcePort\", \"\$sp\", \"\$var(dialog_body)\");
+  jansson_set(\"string\", \"sourceTransport\", \"\$proto\", \"\$var(dialog_body)\");
+  jansson_set(\"string\", \"ruriUser\", \"\$rU\", \"\$var(dialog_body)\");
+  jansson_set(\"string\", \"ruriDomain\", \"\$rd\", \"\$var(dialog_body)\");
+  \$var(dialog_reply) = \"\";
+
+  http_client_query(\$var(dialog_url), \$var(dialog_body), \$var(dialog_headers), \"\$var(dialog_reply)\");
+  \$var(dialog_http_code) = \$rc;
+  if (\$var(dialog_http_code) < 200 || \$var(dialog_http_code) >= 300) {
+    xlog(\"L_ERR\", \"MNSCloud dialog route API request failed call=\$ci source=\$si http=\$var(dialog_http_code) curl=\$curlerror(error)\\n\");
+    return(-1);
+  }
+  if (!(\$var(dialog_reply) =~ \"\\\"allowed\\\"[[:space:]]*:[[:space:]]*true\")) {
+    return(-1);
+  }
+  if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
+    \$ru = \$var(dialog_request_uri);
+  }
+  if (jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\")) {
+    if (!jansson_get(\"data.port\", \"\$var(dialog_reply)\", \"\$var(dialog_port)\")) {
+      \$var(dialog_port) = \"5060\";
+    }
+    if (!jansson_get(\"data.transport\", \"\$var(dialog_reply)\", \"\$var(dialog_transport)\")) {
+      \$var(dialog_transport) = \"udp\";
+    }
+    \$du = \"sip:\" + \$var(dialog_host) + \":\" + \$var(dialog_port) + \";transport=\" + \$var(dialog_transport);
+  }
+  if (\$ru == \"\" && \$du == \"\") {
+    return(-1);
+  }
+  remove_hf(\"Route\");
+  return(1);
+}
+
 route[ACCOUNTING_EVENT] {
   if (\$var(accounting_event) == \"\") {
     \$var(accounting_event) = \"unknown\";
@@ -881,6 +922,18 @@ route[ACCOUNTING_EVENT] {
   jansson_set(\"string\", \"call_id\", \"\$ci\", \"\$var(accounting_body)\");
   jansson_set(\"string\", \"direction\", \"\$avp(direction)\", \"\$var(accounting_body)\");
   jansson_set(\"string\", \"caller\", \"\$fU\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"sourceIP\", \"\$si\", \"\$var(accounting_body)\");
+  jansson_set(\"integer\", \"sourcePort\", \"\$sp\", \"\$var(accounting_body)\");
+  jansson_set(\"string\", \"sourceTransport\", \"\$proto\", \"\$var(accounting_body)\");
+  if (\$ct != \"\") {
+    \$var(accounting_source_contact_uri) = \$(ct{nameaddr.uri});
+    if (\$var(accounting_source_contact_uri) != \"\") {
+      jansson_set(\"string\", \"sourceContactUri\", \"\$var(accounting_source_contact_uri)\", \"\$var(accounting_body)\");
+    }
+  }
+  if (\$var(accounting_output_contact_uri) != \"\") {
+    jansson_set(\"string\", \"outputContactUri\", \"\$var(accounting_output_contact_uri)\", \"\$var(accounting_body)\");
+  }
   if (\$avp(callee_number) != \"\") {
     jansson_set(\"string\", \"callee\", \"\$avp(callee_number)\", \"\$var(accounting_body)\");
   } else {
@@ -939,8 +992,8 @@ ${rtpengine_delete}
   if (has_totag()) {
     if (!loose_route()) {
       xlog(\"L_WARN\", \"MNSCloud in-dialog without Route engine=kamailio method=\$rm call=\$ci ruri=\$ru from=\$fu to=\$tu source=\$si\\n\");
-      if (is_method(\"ACK|BYE\") && route(INBOUND_ROUTE)) {
-        xlog(\"L_WARN\", \"MNSCloud in-dialog fallback routed engine=kamailio method=\$rm call=\$ci ruri=\$ru source=\$si\\n\");
+      if (is_method(\"ACK|BYE\") && route(DIALOG_ROUTE)) {
+        xlog(\"L_WARN\", \"MNSCloud in-dialog dialog-routed engine=kamailio method=\$rm call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
         if (is_method(\"BYE\")) {
           \$var(accounting_event) = \"bye\";
           \$var(accounting_sip_code) = \"\";
@@ -1052,6 +1105,9 @@ onreply_route[MNSCLOUD_ACCOUNTING_REPLY] {
   if (\$rs >= 200) {
     if (\$rs >= 200 && \$rs < 300) {
       \$var(accounting_event) = \"answered\";
+      if (\$ct != \"\") {
+        \$var(accounting_output_contact_uri) = \$(ct{nameaddr.uri});
+      }
     } else {
       \$var(accounting_event) = \"failed\";
     }
