@@ -869,6 +869,7 @@ route[INBOUND_ROUTE] {
 }
 
 route[DIALOG_ROUTE] {
+  \$var(dialog_routed) = \"0\";
   \$var(dialog_url) = \"${API_BASE}/api/v1/softswitch/runtime/dialog?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}\";
   \$var(dialog_headers) = \"Content-Type: application/json\\r\\nAuthorization: Bearer ${API_TOKEN}\\r\\nX-Softswitch-Engine: ${SOFTSWITCH_ENGINE}\";
   \$var(dialog_body) = '{}';
@@ -907,6 +908,7 @@ route[DIALOG_ROUTE] {
     return(-1);
   }
   remove_hf(\"Route\");
+  \$var(dialog_routed) = \"1\";
   return(1);
 }
 
@@ -993,7 +995,10 @@ ${rtpengine_delete}
   }
 
   if (has_totag()) {
-    if (is_method(\"ACK\") && route(DIALOG_ROUTE)) {
+    if (is_method(\"ACK\")) {
+      route(DIALOG_ROUTE);
+    }
+    if (is_method(\"ACK\") && \$var(dialog_routed) == \"1\") {
       xlog(\"L_WARN\", \"MNSCloud in-dialog ACK dialog-routed before loose_route engine=kamailio call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
       if (!forward()) {
         xlog(\"L_ERR\", \"MNSCloud in-dialog ACK forward failed engine=kamailio call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
@@ -1003,7 +1008,10 @@ ${rtpengine_delete}
 
     if (!loose_route()) {
       xlog(\"L_WARN\", \"MNSCloud in-dialog without Route engine=kamailio method=\$rm call=\$ci ruri=\$ru from=\$fu to=\$tu source=\$si\\n\");
-      if (is_method(\"ACK|BYE\") && route(DIALOG_ROUTE)) {
+      if (is_method(\"ACK|BYE\")) {
+        route(DIALOG_ROUTE);
+      }
+      if (is_method(\"ACK|BYE\") && \$var(dialog_routed) == \"1\") {
         xlog(\"L_WARN\", \"MNSCloud in-dialog dialog-routed engine=kamailio method=\$rm call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
         if (is_method(\"BYE\")) {
           \$var(accounting_event) = \"bye\";
