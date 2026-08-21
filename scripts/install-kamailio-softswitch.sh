@@ -1013,6 +1013,12 @@ ${rtpengine_delete}
       sl_send_reply(\"404\", \"Not Here\");
       exit;
     }
+    if (\$rd == "${private_ip}" || \$rd == "${public_ip}") {
+      xlog(\"L_INFO\", \"MNSCloud consuming stacked local Route engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru route=\$hdr(Route) source=\$si\\n\");
+      if (!loose_route()) {
+        xlog(\"L_WARN\", \"MNSCloud failed to consume stacked local Route engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru route=\$hdr(Route) source=\$si\\n\");
+      }
+    }
 ${rtpengine_delete}
     if (is_method(\"BYE\")) {
       \$var(accounting_event) = \"bye\";
