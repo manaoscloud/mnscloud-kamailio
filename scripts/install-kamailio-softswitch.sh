@@ -892,6 +892,7 @@ route[DIALOG_ROUTE] {
   }
   if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
     \$ru = \$var(dialog_request_uri);
+    \$du = \$var(dialog_request_uri);
   }
   if (jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\")) {
     if (!jansson_get(\"data.port\", \"\$var(dialog_reply)\", \"\$var(dialog_port)\")) {
