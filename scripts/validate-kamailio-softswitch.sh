@@ -90,6 +90,10 @@ grep -Fq 'failed to shift records' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'temporarily deferred' scripts/sync-kamailio-softswitch-runtime.sh
 ! grep -Fq 'sleep "$UAC_RELOAD_MIN_INTERVAL"' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'if (!(\$var(auth_authorized) =~ \"^(true|1)$\"))' "$installer"
+grep -Fq '\$du = \$var(dialog_request_uri);' "$installer" || {
+  echo "[validate-kamailio-softswitch] dialog route must force destination URI when API returns a direct dialog Request-URI" >&2
+  exit 1
+}
 grep -Fq 'UAC_DEFAULT_SOCKET' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'private_ipv4()' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'UAC_DEFAULT_SOCKET="${UAC_DEFAULT_SOCKET/0.0.0.0/${detected_private_ip}}"' scripts/sync-kamailio-softswitch-runtime.sh
