@@ -147,6 +147,12 @@ in-dialog ACK/BYE/re-INVITE routing deterministic behind NAT or container networ
 `loose_route()` can consume the Softswitch-owned Route hop before forwarding to the registered UA.
 The generated dialog route calls `loose_route()` once per in-dialog request; each chained engine must
 consume only its own Record-Route hop and leave the next hop for the next engine.
+When the Softswitch is chained behind an MNSCloud SBC and both servers share a private/service
+network, set `MNSCLOUD_SBC_INTERNAL_SIP_TARGET` to the SBC internal SIP URI, for example
+`sip:<sbc_private_ip>:5060;transport=udp`. Kamailio still advertises and Record-Routes its public SIP
+identity, but endpoint-originated in-dialog BYE requests are transported to the SBC through the
+internal target. This avoids public hairpin/NAT and lets the BYE final response return to the
+Kamailio transaction socket.
 When runtime route/auth responses include `codecPolicy.rtpengineFlags`, the generated Kamailio
 configuration passes those control-plane generated flags to `rtpengine_offer()` and
 `rtpengine_answer()`. Codec manipulation remains fail-closed and API-owned: this connector must not
