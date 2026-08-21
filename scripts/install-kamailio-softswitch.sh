@@ -993,6 +993,14 @@ ${rtpengine_delete}
   }
 
   if (has_totag()) {
+    if (is_method(\"ACK\") && route(DIALOG_ROUTE)) {
+      xlog(\"L_WARN\", \"MNSCloud in-dialog ACK dialog-routed before loose_route engine=kamailio call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
+      if (!t_relay()) {
+        xlog(\"L_ERR\", \"MNSCloud in-dialog ACK relay failed engine=kamailio call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
+      }
+      exit;
+    }
+
     if (!loose_route()) {
       xlog(\"L_WARN\", \"MNSCloud in-dialog without Route engine=kamailio method=\$rm call=\$ci ruri=\$ru from=\$fu to=\$tu source=\$si\\n\");
       if (is_method(\"ACK|BYE\") && route(DIALOG_ROUTE)) {
