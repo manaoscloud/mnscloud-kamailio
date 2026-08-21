@@ -3,9 +3,9 @@
   "repository": "manaoscloud/mnscloud-kamailio-softswitch",
   "channels": {
     "stable": {
-      "version": "0.1.129",
-      "ref": "v0.1.129",
-      "releasedAt": "2026-08-21T03:50:40Z",
+      "version": "0.1.130",
+      "ref": "v0.1.130",
+      "releasedAt": "2026-08-21T04:15:59Z",
       "minimumVersion": "0.1.0"
     }
   }
