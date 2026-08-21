@@ -497,14 +497,9 @@ write_kamailio_config() {
   resolve_kamailio_sip_listen_ip
   private_ip="${KAMAILIO_SIP_LISTEN_IP}"
   public_ip="$(public_ipv4)"
-  if [[ -n "${public_ip}" && "${public_ip}" != "${private_ip}" ]]; then
+  if [[ -n "${public_ip}" ]]; then
     record_route_block="$(cat <<EOF
-      if (\$si =~ "^(10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|192\\.168\\.)") {
-        record_route_preset("${public_ip}:5060", "${private_ip}:5060");
-      } else {
-        record_route_preset("${private_ip}:5060", "${public_ip}:5060");
-      }
-      add_rr_param(";r2=on");
+      record_route_preset("${public_ip}:5060");
 EOF
 )"
   else
