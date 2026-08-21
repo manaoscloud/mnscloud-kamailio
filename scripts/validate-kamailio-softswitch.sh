@@ -102,6 +102,14 @@ grep -Fq 'MNSCloud in-dialog ACK forward failed' "$installer" || {
   echo "[validate-kamailio-softswitch] ACK 2xx dialog routing must use stateless forward diagnostics" >&2
   exit 1
 }
+grep -Fq '\$var(dialog_routed) = \"1\";' "$installer" || {
+  echo "[validate-kamailio-softswitch] dialog route must set an explicit routed flag" >&2
+  exit 1
+}
+grep -Fq 'is_method(\"ACK\") && \$var(dialog_routed) == \"1\"' "$installer" || {
+  echo "[validate-kamailio-softswitch] ACK routing must test the explicit dialog routed flag" >&2
+  exit 1
+}
 grep -Fq 'UAC_DEFAULT_SOCKET' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'private_ipv4()' scripts/sync-kamailio-softswitch-runtime.sh
 grep -Fq 'UAC_DEFAULT_SOCKET="${UAC_DEFAULT_SOCKET/0.0.0.0/${detected_private_ip}}"' scripts/sync-kamailio-softswitch-runtime.sh
