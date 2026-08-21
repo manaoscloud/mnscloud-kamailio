@@ -12,6 +12,7 @@ API_TOKEN_FILE="/etc/mnscloud/softswitch/api.token"
 API_BASE_FILE="/etc/mnscloud/softswitch/api.base"
 MEDIA_SOCKET_FILE="/etc/mnscloud/softswitch/media.socket"
 SBC_INTERNAL_SIP_TARGET_FILE="/etc/mnscloud/softswitch/sbc-internal-sip-target"
+SBC_PUBLIC_SIP_HOST_FILE="/etc/mnscloud/softswitch/sbc-public-sip-host"
 UAC_DB_TEXT_DIR="/etc/mnscloud/softswitch/kamailio-db"
 KAMAILIO_LOG_DIR="/var/log/mnscloud/kamailio"
 DEFAULT_API_BASE="${MNSCLOUD_API_BASE:-https://api.example.com}"
@@ -24,6 +25,7 @@ UAC_CONTACT_ADDR="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}"
 UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
 KAMAILIO_SIP_LISTEN_IP="${MNSCLOUD_KAMAILIO_SIP_LISTEN_IP:-}"
 SBC_INTERNAL_SIP_TARGET="${MNSCLOUD_SBC_INTERNAL_SIP_TARGET:-}"
+SBC_PUBLIC_SIP_HOST="${MNSCLOUD_SBC_PUBLIC_SIP_HOST:-}"
 KAMAILIO_RUNTIME_USER="${MNSCLOUD_KAMAILIO_RUNTIME_USER:-kamailio}"
 KAMAILIO_RUNTIME_GROUP="${MNSCLOUD_KAMAILIO_RUNTIME_GROUP:-kamailio}"
 KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}"
@@ -73,12 +75,20 @@ refresh_agent_capabilities() {
 
 load_sbc_internal_sip_target() {
   if [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
-    return 0
-  fi
-  if [[ -f "${SBC_INTERNAL_SIP_TARGET_FILE}" ]]; then
+    :
+  elif [[ -f "${SBC_INTERNAL_SIP_TARGET_FILE}" ]]; then
     SBC_INTERNAL_SIP_TARGET="$(tr -d '[:space:]' < "${SBC_INTERNAL_SIP_TARGET_FILE}")"
     if [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
       ok "SBC internal SIP target loaded from ${SBC_INTERNAL_SIP_TARGET_FILE}: ${SBC_INTERNAL_SIP_TARGET}"
+    fi
+  fi
+
+  if [[ -n "${SBC_PUBLIC_SIP_HOST}" ]]; then
+    :
+  elif [[ -f "${SBC_PUBLIC_SIP_HOST_FILE}" ]]; then
+    SBC_PUBLIC_SIP_HOST="$(tr -d '[:space:]' < "${SBC_PUBLIC_SIP_HOST_FILE}")"
+    if [[ -n "${SBC_PUBLIC_SIP_HOST}" ]]; then
+      ok "SBC public SIP host loaded from ${SBC_PUBLIC_SIP_HOST_FILE}: ${SBC_PUBLIC_SIP_HOST}"
     fi
   fi
 }
@@ -574,19 +584,19 @@ onreply_route[MEDIA_ANSWER] {
     }
 '
   fi
-  if [[ -n "${SBC_INTERNAL_SIP_TARGET}" && -n "${public_ip}" ]]; then
+  if [[ -n "${SBC_INTERNAL_SIP_TARGET}" && -n "${SBC_PUBLIC_SIP_HOST}" ]]; then
     sbc_internal_route_rewrite="$(cat <<EOF
       # Keep the public Record-Route identity for external SIP endpoints, but route established
       # dialogs to the SBC through the private/service network when this Softswitch is deployed
       # beside an MNSCloud SBC. This avoids public hairpin/NAT on endpoint-originated BYE and lets
       # the BYE 200 OK return to the Kamailio transaction socket.
-      if (\$du =~ "sip:${public_ip}:5060" || \$rd == "${public_ip}") {
+      if (\$du =~ "sip:${SBC_PUBLIC_SIP_HOST}:5060" || \$rd == "${SBC_PUBLIC_SIP_HOST}") {
         \$du = "${SBC_INTERNAL_SIP_TARGET}";
       }
 EOF
 )"
   elif [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
-    warn "MNSCLOUD_SBC_INTERNAL_SIP_TARGET was provided, but no public SIP IP was detected; skipping SBC internal route rewrite"
+    warn "MNSCLOUD_SBC_INTERNAL_SIP_TARGET was provided, but no SBC public SIP host was detected; skipping SBC internal route rewrite"
   fi
   write_file "$cfg" "#!KAMAILIO
 # MNSCloud managed Kamailio Softswitch runtime
@@ -897,6 +907,7 @@ route[INBOUND_ROUTE] {
 }
 
 route[DIALOG_ROUTE] {
+  xlog(\"L_WARN\", \"MNSCloud dialog route entered engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru route=\$hdr(Route) source=\$si\\n\");
   \$var(dialog_routed) = \"0\";
   \$var(dialog_url) = \"${API_BASE}/api/v1/softswitch/runtime/dialog?node_uuid=${NODE_UUID}&engine=${SOFTSWITCH_ENGINE}\";
   \$var(dialog_headers) = \"Content-Type: application/json\\r\\nAuthorization: Bearer ${API_TOKEN}\\r\\nX-Softswitch-Engine: ${SOFTSWITCH_ENGINE}\";
@@ -919,7 +930,27 @@ route[DIALOG_ROUTE] {
   if (!(\$var(dialog_reply) =~ \"\\\"allowed\\\"[[:space:]]*:[[:space:]]*true\")) {
     return(-1);
   }
-  if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
+  # ACK for a 2xx final response must reach the UAS Contact that generated the 200 OK.
+  # In public-edge deployments the ACK can hairpin back with a bridge/NAT source IP, so
+  # source-IP leg inference can select the opposite side of the dialog. Prefer the stored
+  # outputContactUri for ACK when available, then fall back to the generic requestURI.
+  if (is_method(\"ACK\") && jansson_get(\"data.outputContactUri\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
+    \$ru = \$var(dialog_request_uri);
+    \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
+    \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
+    \$var(dialog_transport) = \$(var(dialog_request_uri){uri.transport});
+    if (\$var(dialog_host) != \"\") {
+      if (\$var(dialog_port) == \"\") {
+        \$var(dialog_port) = \"5060\";
+      }
+      if (\$var(dialog_transport) == \"\") {
+        \$var(dialog_transport) = \"udp\";
+      }
+      \$du = \"sip:\" + \$var(dialog_host) + \":\" + \$var(dialog_port) + \";transport=\" + \$var(dialog_transport);
+    } else {
+      \$du = \$var(dialog_request_uri);
+    }
+  } else if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
     \$ru = \$var(dialog_request_uri);
     \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
     \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
@@ -936,7 +967,7 @@ route[DIALOG_ROUTE] {
       \$du = \$var(dialog_request_uri);
     }
   }
-  if (jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\")) {
+  if (jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\") && \$var(dialog_host) != \"\") {
     if (!jansson_get(\"data.port\", \"\$var(dialog_reply)\", \"\$var(dialog_port)\")) {
       \$var(dialog_port) = \"5060\";
     }
@@ -949,7 +980,16 @@ route[DIALOG_ROUTE] {
     return(-1);
   }
   remove_hf(\"Route\");
+  xlog(\"L_WARN\", \"MNSCloud dialog route selected engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
   \$var(dialog_routed) = \"1\";
+  if (is_method(\"ACK\")) {
+    xlog(\"L_WARN\", \"MNSCloud dialog route forwarding ACK engine=${SOFTSWITCH_ENGINE} call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
+    if (!t_relay()) {
+      xlog(\"L_ERR\", \"MNSCloud dialog route ACK relay failed engine=${SOFTSWITCH_ENGINE} call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
+      sl_reply_error();
+    }
+    exit;
+  }
   return(1);
 }
 
@@ -1040,9 +1080,10 @@ ${rtpengine_delete}
       route(DIALOG_ROUTE);
     }
     if (is_method(\"ACK\") && \$var(dialog_routed) == \"1\") {
-      xlog(\"L_WARN\", \"MNSCloud in-dialog ACK dialog-routed before loose_route engine=kamailio call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
-      if (!forward()) {
-        xlog(\"L_ERR\", \"MNSCloud in-dialog ACK forward failed engine=kamailio call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
+      xlog(\"L_WARN\", \"MNSCloud in-dialog ACK contact-routed engine=kamailio call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
+      if (!t_relay()) {
+        xlog(\"L_ERR\", \"MNSCloud in-dialog ACK contact relay failed engine=kamailio call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
+        sl_reply_error();
       }
       exit;
     }

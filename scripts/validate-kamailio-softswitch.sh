@@ -94,20 +94,24 @@ grep -Fq '\$du = \$var(dialog_request_uri);' "$installer" || {
   echo "[validate-kamailio-softswitch] dialog route must force destination URI when API returns a direct dialog Request-URI" >&2
   exit 1
 }
-grep -Fq 'MNSCloud in-dialog ACK dialog-routed before loose_route' "$installer" || {
-  echo "[validate-kamailio-softswitch] ACK 2xx dialog routing must run before loose_route" >&2
+grep -Fq 'MNSCloud in-dialog ACK contact-routed' "$installer" || {
+  echo "[validate-kamailio-softswitch] ACK 2xx must be routed to the stored dialog Contact before loose_route can consume the route-set" >&2
   exit 1
 }
-grep -Fq 'MNSCloud in-dialog ACK forward failed' "$installer" || {
-  echo "[validate-kamailio-softswitch] ACK 2xx dialog routing must use stateless forward diagnostics" >&2
+! grep -Fq 'MNSCloud in-dialog ACK dialog-routed before loose_route' "$installer" || {
+  echo "[validate-kamailio-softswitch] ACK 2xx must use the explicit contact-routed path name, not the obsolete dialog-routed-before-loose-route behavior" >&2
+  exit 1
+}
+grep -Fq 'SBC_PUBLIC_SIP_HOST_FILE="/etc/mnscloud/softswitch/sbc-public-sip-host"' "$installer" || {
+  echo "[validate-kamailio-softswitch] SBC public SIP host must be configurable for established dialog routing" >&2
   exit 1
 }
 grep -Fq '\$var(dialog_routed) = \"1\";' "$installer" || {
   echo "[validate-kamailio-softswitch] dialog route must set an explicit routed flag" >&2
   exit 1
 }
-grep -Fq 'is_method(\"ACK\") && \$var(dialog_routed) == \"1\"' "$installer" || {
-  echo "[validate-kamailio-softswitch] ACK routing must test the explicit dialog routed flag" >&2
+grep -Fq 'if (is_method(\"ACK\") && t_check_trans())' "$installer" || {
+  echo "[validate-kamailio-softswitch] ACK fallback must remain transaction-safe when no dialog route is available" >&2
   exit 1
 }
 grep -Fq 'UAC_DEFAULT_SOCKET' scripts/sync-kamailio-softswitch-runtime.sh
