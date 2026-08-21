@@ -493,16 +493,23 @@ write_kamailio_config() {
   local cfg="/etc/kamailio/kamailio.cfg"
   local rtpengine_modules="" rtpengine_params="" rtpengine_offer="" rtpengine_delete=""
   local cfg_group="${KAMAILIO_RUNTIME_GROUP}"
-  local private_ip="" public_ip="" record_route_block=""
+  local private_ip="" public_ip="" listen_block="" alias_block="" record_route_block=""
   resolve_kamailio_sip_listen_ip
   private_ip="${KAMAILIO_SIP_LISTEN_IP}"
   public_ip="$(public_ipv4)"
   if [[ -n "${public_ip}" ]]; then
+    listen_block="listen=udp:${KAMAILIO_SIP_LISTEN_IP}:5060 advertise ${public_ip}:5060
+listen=tcp:${KAMAILIO_SIP_LISTEN_IP}:5060 advertise ${public_ip}:5060"
+    alias_block="alias=\"${KAMAILIO_SIP_LISTEN_IP}:5060\"
+alias=\"${public_ip}:5060\""
     record_route_block="$(cat <<EOF
       record_route_preset("${public_ip}:5060");
 EOF
 )"
   else
+    listen_block="listen=udp:${KAMAILIO_SIP_LISTEN_IP}:5060
+listen=tcp:${KAMAILIO_SIP_LISTEN_IP}:5060"
+    alias_block="alias=\"${KAMAILIO_SIP_LISTEN_IP}:5060\""
     record_route_block="      record_route();"
   fi
   rtpengine_offer='
@@ -556,9 +563,9 @@ onreply_route[MEDIA_ANSWER] {
   write_file "$cfg" "#!KAMAILIO
 # MNSCloud managed Kamailio Softswitch runtime
 
-listen=udp:${KAMAILIO_SIP_LISTEN_IP}:5060
-listen=tcp:${KAMAILIO_SIP_LISTEN_IP}:5060
+${listen_block}
 auto_aliases=no
+${alias_block}
 children=4
 log_stderror=no
 user_agent_header=\"User-Agent: MNSCloud Kamailio Softswitch\"
