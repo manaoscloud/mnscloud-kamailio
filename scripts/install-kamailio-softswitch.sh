@@ -11,6 +11,7 @@ NODE_UUID_FILE="/etc/mnscloud/softswitch/node.uuid"
 API_TOKEN_FILE="/etc/mnscloud/softswitch/api.token"
 API_BASE_FILE="/etc/mnscloud/softswitch/api.base"
 MEDIA_SOCKET_FILE="/etc/mnscloud/softswitch/media.socket"
+SBC_INTERNAL_SIP_TARGET_FILE="/etc/mnscloud/softswitch/sbc-internal-sip-target"
 UAC_DB_TEXT_DIR="/etc/mnscloud/softswitch/kamailio-db"
 KAMAILIO_LOG_DIR="/var/log/mnscloud/kamailio"
 DEFAULT_API_BASE="${MNSCLOUD_API_BASE:-https://api.example.com}"
@@ -68,6 +69,18 @@ refresh_agent_capabilities() {
 
   warn "mnscloud-agent source repo not found at ${AGENT_REPO_INSTALLER}; restarting service so runtime capability detection can refresh."
   run "systemctl restart mnscloud-agent"
+}
+
+load_sbc_internal_sip_target() {
+  if [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
+    return 0
+  fi
+  if [[ -f "${SBC_INTERNAL_SIP_TARGET_FILE}" ]]; then
+    SBC_INTERNAL_SIP_TARGET="$(tr -d '[:space:]' < "${SBC_INTERNAL_SIP_TARGET_FILE}")"
+    if [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
+      ok "SBC internal SIP target loaded from ${SBC_INTERNAL_SIP_TARGET_FILE}: ${SBC_INTERNAL_SIP_TARGET}"
+    fi
+  fi
 }
 
 normalize_url() {
@@ -1264,6 +1277,7 @@ main() {
   stop_existing_kamailio
   bootstrap_node_via_api || true
   ensure_uac_contact_addr
+  load_sbc_internal_sip_target
   write_kamailio_config
   enable_service
   refresh_agent_capabilities

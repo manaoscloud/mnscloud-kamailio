@@ -153,6 +153,9 @@ network, set `MNSCLOUD_SBC_INTERNAL_SIP_TARGET` to the SBC internal SIP URI, for
 identity, but endpoint-originated in-dialog BYE requests are transported to the SBC through the
 internal target. This avoids public hairpin/NAT and lets the BYE final response return to the
 Kamailio transaction socket.
+For persistent host configuration across Agent/manual runtime updates, write the same URI to
+`/etc/mnscloud/softswitch/sbc-internal-sip-target` with mode `0640`; the installer reads this file
+when the environment variable is not provided.
 When runtime route/auth responses include `codecPolicy.rtpengineFlags`, the generated Kamailio
 configuration passes those control-plane generated flags to `rtpengine_offer()` and
 `rtpengine_answer()`. Codec manipulation remains fail-closed and API-owned: this connector must not
