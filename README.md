@@ -145,6 +145,8 @@ When a public SIP address is available, the generated listeners use Kamailio `ad
 both the private listener and the public SIP identity as `alias` entries with port `5060`. This keeps
 in-dialog ACK/BYE/re-INVITE routing deterministic behind NAT or container networking, because
 `loose_route()` can consume the Softswitch-owned Route hop before forwarding to the registered UA.
+The generated dialog route calls `loose_route()` once per in-dialog request; each chained engine must
+consume only its own Record-Route hop and leave the next hop for the next engine.
 When runtime route/auth responses include `codecPolicy.rtpengineFlags`, the generated Kamailio
 configuration passes those control-plane generated flags to `rtpengine_offer()` and
 `rtpengine_answer()`. Codec manipulation remains fail-closed and API-owned: this connector must not
