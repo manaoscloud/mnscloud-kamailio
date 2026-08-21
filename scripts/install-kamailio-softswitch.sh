@@ -893,7 +893,20 @@ route[DIALOG_ROUTE] {
   }
   if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
     \$ru = \$var(dialog_request_uri);
-    \$du = \$var(dialog_request_uri);
+    \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
+    \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
+    \$var(dialog_transport) = \$(var(dialog_request_uri){uri.transport});
+    if (\$var(dialog_host) != \"\") {
+      if (\$var(dialog_port) == \"\") {
+        \$var(dialog_port) = \"5060\";
+      }
+      if (\$var(dialog_transport) == \"\") {
+        \$var(dialog_transport) = \"udp\";
+      }
+      \$du = \"sip:\" + \$var(dialog_host) + \":\" + \$var(dialog_port) + \";transport=\" + \$var(dialog_transport);
+    } else {
+      \$du = \$var(dialog_request_uri);
+    }
   }
   if (jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\")) {
     if (!jansson_get(\"data.port\", \"\$var(dialog_reply)\", \"\$var(dialog_port)\")) {
