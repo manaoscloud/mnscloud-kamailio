@@ -22,6 +22,7 @@ MEDIA_SOCKET=""
 UAC_CONTACT_ADDR="${MNSCLOUD_KAMAILIO_UAC_CONTACT_ADDR:-}"
 UAC_DEFAULT_SOCKET="${MNSCLOUD_KAMAILIO_UAC_DEFAULT_SOCKET:-udp:0.0.0.0:5060}"
 KAMAILIO_SIP_LISTEN_IP="${MNSCLOUD_KAMAILIO_SIP_LISTEN_IP:-}"
+SBC_INTERNAL_SIP_TARGET="${MNSCLOUD_SBC_INTERNAL_SIP_TARGET:-}"
 KAMAILIO_RUNTIME_USER="${MNSCLOUD_KAMAILIO_RUNTIME_USER:-kamailio}"
 KAMAILIO_RUNTIME_GROUP="${MNSCLOUD_KAMAILIO_RUNTIME_GROUP:-kamailio}"
 KAMAILIO_RUNTIME_KIT_DIR="${KAMAILIO_RUNTIME_KIT_DIR:-/opt/mnscloud/runtime-kit}"
@@ -493,7 +494,7 @@ write_kamailio_config() {
   local cfg="/etc/kamailio/kamailio.cfg"
   local rtpengine_modules="" rtpengine_params="" rtpengine_offer="" rtpengine_delete=""
   local cfg_group="${KAMAILIO_RUNTIME_GROUP}"
-  local private_ip="" public_ip="" listen_block="" alias_block="" record_route_block=""
+  local private_ip="" public_ip="" listen_block="" alias_block="" record_route_block="" sbc_internal_route_rewrite=""
   resolve_kamailio_sip_listen_ip
   private_ip="${KAMAILIO_SIP_LISTEN_IP}"
   public_ip="$(public_ipv4)"
@@ -559,6 +560,20 @@ onreply_route[MEDIA_ANSWER] {
       rtpengine_delete();
     }
 '
+  fi
+  if [[ -n "${SBC_INTERNAL_SIP_TARGET}" && -n "${public_ip}" ]]; then
+    sbc_internal_route_rewrite="$(cat <<EOF
+      # Keep the public Record-Route identity for external SIP endpoints, but route established
+      # dialogs to the SBC through the private/service network when this Softswitch is deployed
+      # beside an MNSCloud SBC. This avoids public hairpin/NAT on endpoint-originated BYE and lets
+      # the BYE 200 OK return to the Kamailio transaction socket.
+      if (\$du =~ "sip:${public_ip}:5060" || \$rd == "${public_ip}") {
+        \$du = "${SBC_INTERNAL_SIP_TARGET}";
+      }
+EOF
+)"
+  elif [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
+    warn "MNSCLOUD_SBC_INTERNAL_SIP_TARGET was provided, but no public SIP IP was detected; skipping SBC internal route rewrite"
   fi
   write_file "$cfg" "#!KAMAILIO
 # MNSCloud managed Kamailio Softswitch runtime
@@ -1053,6 +1068,7 @@ ${rtpengine_delete}
       route(ACCOUNTING_EVENT);
     }
     if (is_method(\"BYE\")) {
+${sbc_internal_route_rewrite}
       xlog(\"L_INFO\", \"MNSCloud in-dialog BYE loose_route engine=${SOFTSWITCH_ENGINE} call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
     }
     if (!t_relay()) { sl_reply_error(); }
