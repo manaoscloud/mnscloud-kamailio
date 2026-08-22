@@ -699,12 +699,12 @@ route[AUTH_LOOKUP] {
   }
   if (\$var(auth_http_code) < 200 || \$var(auth_http_code) >= 300) {
     xlog(\"L_ERR\", \"MNSCloud auth API request failed engine=${SOFTSWITCH_ENGINE} source=\$si username=\$var(from_user) domain=\$var(auth_domain) http=\$var(auth_http_code) curl=\$curlerror(error)\\n\");
-    return(-1);
+    return(-20);
   }
 
   if (!jansson_get(\"authorized\", \"\$var(auth_reply)\", \"\$var(auth_authorized)\")) {
     xlog(\"L_ERR\", \"MNSCloud auth API returned invalid JSON for \$fU@\$fd\\n\");
-    return(-2);
+    return(-20);
   }
 
   if (!(\$var(auth_authorized) =~ \"^(true|1)$\")) {
@@ -714,7 +714,7 @@ route[AUTH_LOOKUP] {
 
   if (!jansson_get(\"data.password\", \"\$var(auth_reply)\", \"\$var(auth_password)\")) {
     xlog(\"L_ERR\", \"MNSCloud auth response missing password for \$fU@\$fd\\n\");
-    return(-3);
+    return(-20);
   }
 
   jansson_get(\"data.accountUUID\", \"\$var(auth_reply)\", \"\$avp(account_uuid)\");
@@ -732,8 +732,13 @@ route[REGISTER_AUTH] {
     sl_send_reply(\"503\", \"Authentication Temporarily Unavailable\");
     exit;
   }
-  if (\$rc < 0) {
+  if (\$rc == -2) {
     sl_send_reply(\"403\", \"Forbidden\");
+    exit;
+  }
+  if (\$rc < 0) {
+    append_to_reply(\"Retry-After: 60\\r\\n\");
+    sl_send_reply(\"503\", \"Authentication Temporarily Unavailable\");
     exit;
   }
 
@@ -753,8 +758,13 @@ route[PROXY_AUTH] {
     sl_send_reply(\"503\", \"Authentication Temporarily Unavailable\");
     exit;
   }
-  if (\$rc < 0) {
+  if (\$rc == -2) {
     sl_send_reply(\"403\", \"Forbidden\");
+    exit;
+  }
+  if (\$rc < 0) {
+    append_to_reply(\"Retry-After: 60\\r\\n\");
+    sl_send_reply(\"503\", \"Authentication Temporarily Unavailable\");
     exit;
   }
 
