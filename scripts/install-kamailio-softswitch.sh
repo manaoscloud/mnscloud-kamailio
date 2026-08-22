@@ -408,9 +408,16 @@ resolve_kamailio_sip_listen_ip() {
 }
 
 public_ipv4() {
-  curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null ||
-    curl -fsS --max-time 5 https://ifconfig.me/ip 2>/dev/null ||
-    true
+  local candidate=""
+  candidate="$(
+    curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null ||
+      curl -4 -fsS --max-time 5 https://ifconfig.me/ip 2>/dev/null ||
+      true
+  )"
+  candidate="$(printf '%s' "${candidate}" | tr -d '[:space:]')"
+  if [[ "${candidate}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    printf '%s\n' "${candidate}"
+  fi
 }
 
 bootstrap_node_via_api() {
@@ -517,7 +524,7 @@ write_kamailio_config() {
   local cfg="/etc/kamailio/kamailio.cfg"
   local rtpengine_modules="" rtpengine_params="" rtpengine_offer="" rtpengine_delete=""
   local cfg_group="${KAMAILIO_RUNTIME_GROUP}"
-  local private_ip="" public_ip="" listen_block="" alias_block="" record_route_block="" sbc_internal_route_rewrite=""
+  local private_ip="" public_ip="" listen_block="" alias_block="" record_route_block="" sbc_internal_route_rewrite="" sbc_internal_source_ip="" sbc_webrtc_dialog_location_route=""
   resolve_kamailio_sip_listen_ip
   private_ip="${KAMAILIO_SIP_LISTEN_IP}"
   public_ip="$(public_ipv4)"
@@ -585,6 +592,7 @@ onreply_route[MEDIA_ANSWER] {
 '
   fi
   if [[ -n "${SBC_INTERNAL_SIP_TARGET}" && -n "${SBC_PUBLIC_SIP_HOST}" ]]; then
+    sbc_internal_source_ip="$(printf '%s' "${SBC_INTERNAL_SIP_TARGET}" | sed -E 's#^sip:##; s#;.*$##; s#:[0-9]+$##')"
     sbc_internal_route_rewrite="$(cat <<EOF
       # Keep the public Record-Route identity for external SIP endpoints, but route established
       # dialogs to the SBC through the private/service network when this Softswitch is deployed
@@ -595,6 +603,18 @@ onreply_route[MEDIA_ANSWER] {
       }
 EOF
 )"
+    if [[ -n "${sbc_internal_source_ip}" ]]; then
+      sbc_webrtc_dialog_location_route="$(cat <<EOF
+    # ACK/BYE for a WebRTC subscriber can arrive from the SBC with a valid route-set and a
+    # GRUU/local R-URI. loose_route() only advances the route-set; it does not resolve the
+    # registered WSS contact. For SBC-originated in-dialog requests targeting a local subscriber,
+    # resolve usrloc here so Kamailio preserves the Path hop to the WebRTC edge.
+    if (is_method("ACK|BYE") && \$si == "${sbc_internal_source_ip}" && lookup("location")) {
+      xlog("L_WARN", "MNSCloud in-dialog subscriber location route engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n");
+    }
+EOF
+)"
+    fi
   elif [[ -n "${SBC_INTERNAL_SIP_TARGET}" ]]; then
     warn "MNSCLOUD_SBC_INTERNAL_SIP_TARGET was provided, but no SBC public SIP host was detected; skipping SBC internal route rewrite"
   fi
@@ -933,24 +953,30 @@ route[DIALOG_ROUTE] {
   # This fallback is only for in-dialog requests that reached the Softswitch without a
   # usable Route header. Normal in-dialog ACK/BYE must use loose_route() first so the
   # SIP route-set created by Record-Route/Path is preserved all the way to WebRTC.
+  \$var(dialog_location_routed) = \"0\";
   if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
     \$ru = \$var(dialog_request_uri);
-    \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
-    \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
-    \$var(dialog_transport) = \$(var(dialog_request_uri){uri.transport});
-    if (\$var(dialog_host) != \"\") {
-      if (\$var(dialog_port) == \"\") {
-        \$var(dialog_port) = \"5060\";
-      }
-      if (\$var(dialog_transport) == \"\") {
-        \$var(dialog_transport) = \"udp\";
-      }
-      \$du = \"sip:\" + \$var(dialog_host) + \":\" + \$var(dialog_port) + \";transport=\" + \$var(dialog_transport);
+    if (is_method(\"ACK|BYE\") && lookup(\"location\")) {
+      \$var(dialog_location_routed) = \"1\";
+      xlog(\"L_WARN\", \"MNSCloud dialog route selected registered contact engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
     } else {
-      \$du = \$var(dialog_request_uri);
+      \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
+      \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
+      \$var(dialog_transport) = \$(var(dialog_request_uri){uri.transport});
+      if (\$var(dialog_host) != \"\") {
+        if (\$var(dialog_port) == \"\") {
+          \$var(dialog_port) = \"5060\";
+        }
+        if (\$var(dialog_transport) == \"\") {
+          \$var(dialog_transport) = \"udp\";
+        }
+        \$du = \"sip:\" + \$var(dialog_host) + \":\" + \$var(dialog_port) + \";transport=\" + \$var(dialog_transport);
+      } else {
+        \$du = \$var(dialog_request_uri);
+      }
     }
   }
-  if (jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\") && \$var(dialog_host) != \"\") {
+  if (\$var(dialog_location_routed) != \"1\" && jansson_get(\"data.host\", \"\$var(dialog_reply)\", \"\$var(dialog_host)\") && \$var(dialog_host) != \"\") {
     if (!jansson_get(\"data.port\", \"\$var(dialog_reply)\", \"\$var(dialog_port)\")) {
       \$var(dialog_port) = \"5060\";
     }
@@ -962,7 +988,9 @@ route[DIALOG_ROUTE] {
   if (\$ru == \"\" && \$du == \"\") {
     return(-1);
   }
-  remove_hf(\"Route\");
+  if (\$var(dialog_location_routed) != \"1\") {
+    remove_hf(\"Route\");
+  }
   xlog(\"L_WARN\", \"MNSCloud dialog route selected engine=${SOFTSWITCH_ENGINE} method=\$rm call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
   \$var(dialog_routed) = \"1\";
   if (is_method(\"ACK\")) {
@@ -1086,6 +1114,7 @@ ${rtpengine_delete}
       exit;
     }
 ${rtpengine_delete}
+${sbc_webrtc_dialog_location_route}
     if (is_method(\"BYE\")) {
       \$var(accounting_event) = \"bye\";
       \$var(accounting_sip_code) = \"\";
