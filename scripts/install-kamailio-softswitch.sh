@@ -930,27 +930,10 @@ route[DIALOG_ROUTE] {
   if (!(\$var(dialog_reply) =~ \"\\\"allowed\\\"[[:space:]]*:[[:space:]]*true\")) {
     return(-1);
   }
-  # ACK for a 2xx final response must reach the UAS Contact that generated the 200 OK.
-  # In public-edge deployments the ACK can hairpin back with a bridge/NAT source IP, so
-  # source-IP leg inference can select the opposite side of the dialog. Prefer the stored
-  # outputContactUri for ACK when available, then fall back to the generic requestURI.
-  if (is_method(\"ACK\") && jansson_get(\"data.outputContactUri\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
-    \$ru = \$var(dialog_request_uri);
-    \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
-    \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
-    \$var(dialog_transport) = \$(var(dialog_request_uri){uri.transport});
-    if (\$var(dialog_host) != \"\") {
-      if (\$var(dialog_port) == \"\") {
-        \$var(dialog_port) = \"5060\";
-      }
-      if (\$var(dialog_transport) == \"\") {
-        \$var(dialog_transport) = \"udp\";
-      }
-      \$du = \"sip:\" + \$var(dialog_host) + \":\" + \$var(dialog_port) + \";transport=\" + \$var(dialog_transport);
-    } else {
-      \$du = \$var(dialog_request_uri);
-    }
-  } else if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
+  # This fallback is only for in-dialog requests that reached the Softswitch without a
+  # usable Route header. Normal in-dialog ACK/BYE must use loose_route() first so the
+  # SIP route-set created by Record-Route/Path is preserved all the way to WebRTC.
+  if (jansson_get(\"data.requestURI\", \"\$var(dialog_reply)\", \"\$var(dialog_request_uri)\")) {
     \$ru = \$var(dialog_request_uri);
     \$var(dialog_host) = \$(var(dialog_request_uri){uri.host});
     \$var(dialog_port) = \$(var(dialog_request_uri){uri.port});
@@ -1076,18 +1059,6 @@ ${rtpengine_delete}
   }
 
   if (has_totag()) {
-    if (is_method(\"ACK\")) {
-      route(DIALOG_ROUTE);
-    }
-    if (is_method(\"ACK\") && \$var(dialog_routed) == \"1\") {
-      xlog(\"L_WARN\", \"MNSCloud in-dialog ACK contact-routed engine=kamailio call=\$ci ruri=\$ru dst=\$du route=\$hdr(Route) source=\$si\\n\");
-      if (!t_relay()) {
-        xlog(\"L_ERR\", \"MNSCloud in-dialog ACK contact relay failed engine=kamailio call=\$ci ruri=\$ru dst=\$du source=\$si\\n\");
-        sl_reply_error();
-      }
-      exit;
-    }
-
     if (!loose_route()) {
       xlog(\"L_WARN\", \"MNSCloud in-dialog without Route engine=kamailio method=\$rm call=\$ci ruri=\$ru from=\$fu to=\$tu source=\$si\\n\");
       if (is_method(\"ACK|BYE\")) {

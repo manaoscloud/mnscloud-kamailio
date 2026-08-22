@@ -94,12 +94,16 @@ grep -Fq '\$du = \$var(dialog_request_uri);' "$installer" || {
   echo "[validate-kamailio-softswitch] dialog route must force destination URI when API returns a direct dialog Request-URI" >&2
   exit 1
 }
-grep -Fq 'MNSCloud in-dialog ACK contact-routed' "$installer" || {
-  echo "[validate-kamailio-softswitch] ACK 2xx must be routed to the stored dialog Contact before loose_route can consume the route-set" >&2
+! grep -Fq 'MNSCloud in-dialog ACK contact-routed' "$installer" || {
+  echo "[validate-kamailio-softswitch] ACK 2xx must not bypass loose_route() by using stored Contact before the established route-set" >&2
   exit 1
 }
-! grep -Fq 'MNSCloud in-dialog ACK dialog-routed before loose_route' "$installer" || {
-  echo "[validate-kamailio-softswitch] ACK 2xx must use the explicit contact-routed path name, not the obsolete dialog-routed-before-loose-route behavior" >&2
+! grep -Fq 'if (is_method(\"ACK\") && jansson_get(\"data.outputContactUri\"' "$installer" || {
+  echo "[validate-kamailio-softswitch] ACK 2xx must not use outputContactUri as direct destination; WebRTC Contacts are routed through Path/Record-Route" >&2
+  exit 1
+}
+grep -Fq 'Normal in-dialog ACK/BYE must use loose_route() first' "$installer" || {
+  echo "[validate-kamailio-softswitch] dialog fallback must document that loose_route() is the primary in-dialog path" >&2
   exit 1
 }
 grep -Fq 'SBC_PUBLIC_SIP_HOST_FILE="/etc/mnscloud/softswitch/sbc-public-sip-host"' "$installer" || {
