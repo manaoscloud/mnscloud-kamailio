@@ -555,21 +555,14 @@ route[MEDIA_OFFER] {
   if [[ -n "${MEDIA_SOCKET}" ]]; then
     rtpengine_modules="loadmodule \"rtpengine.so\"
 loadmodule \"sdpops.so\""
-    rtpengine_params="modparam(\"rtpengine\", \"rtpengine_sock\", \"${MEDIA_SOCKET}\")
-modparam(\"rtpengine\", \"extra_id_pv\", \"\$avp(mns_rtp_branch)\")"
+    rtpengine_params="modparam(\"rtpengine\", \"rtpengine_sock\", \"${MEDIA_SOCKET}\")"
     rtpengine_offer='
 route[MEDIA_OFFER] {
-  if ($ru =~ "transport=wss") {
-    xlog("L_INFO", "MNSCloud media relay skipped for WebRTC subscriber call=$ci ruri=$ru dst=$du\n");
-    return(1);
-  }
   if (has_body("application/sdp")) {
     $var(media_flags) = $avp(codec_flags);
     if ($var(media_flags) == "") {
       $var(media_flags) = "replace-origin replace-session-connection";
     }
-    $avp(mns_rtp_branch) = "mns-softswitch";
-    $var(media_flags) = $var(media_flags) + " via-branch=extra";
     if (!rtpengine_offer("$var(media_flags)")) {
       xlog("L_ERR", "MNSCloud rtpengine_offer failed\n");
       sl_send_reply("503", "Media Relay Unavailable");
@@ -586,8 +579,6 @@ onreply_route[MEDIA_ANSWER] {
     if ($var(media_flags) == "") {
       $var(media_flags) = "replace-origin replace-session-connection";
     }
-    $avp(mns_rtp_branch) = "mns-softswitch";
-    $var(media_flags) = $var(media_flags) + " via-branch=extra";
     if (!rtpengine_answer("$var(media_flags)")) {
       xlog("L_ERR", "MNSCloud rtpengine_answer failed\n");
     }
@@ -607,9 +598,7 @@ onreply_route[MEDIA_ANSWER] {
       # dialogs to the SBC through the private/service network when this Softswitch is deployed
       # beside an MNSCloud SBC. This avoids public hairpin/NAT on endpoint-originated BYE and lets
       # the BYE 200 OK return to the Kamailio transaction socket.
-      if (\$du =~ "sip:${SBC_PUBLIC_SIP_HOST}:5060" || \$rd == "${SBC_PUBLIC_SIP_HOST}" ||
-          (is_method("BYE") && \$si != "${sbc_internal_source_ip}" &&
-           \$rd != "${public_ip}" && \$rd != "${private_ip}" && \$rd != "")) {
+      if (\$du =~ "sip:${SBC_PUBLIC_SIP_HOST}:5060" || \$rd == "${SBC_PUBLIC_SIP_HOST}") {
         \$du = "${SBC_INTERNAL_SIP_TARGET}";
       }
 EOF
